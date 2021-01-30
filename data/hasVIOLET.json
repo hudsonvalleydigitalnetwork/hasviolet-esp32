@@ -1,0 +1,96 @@
+{
+	"RADIO": {
+		"channel": 1,
+		"channelname": "HVDN",
+		"frequency": 911250000,
+		"spreadfactor": 7,
+		"codingrate4": 8,
+		"bandwidth": 125000,
+		"txpwr": 7
+	},
+	"CONTACT": {
+		"mycall": "NOCALL",
+		"myssid": "99",
+		"mybeacon": "quack quack",
+		"dstcall": "BEACON",
+		"dstssid": "99"
+	},
+	"MACROS": {
+		"M1": "QRZ",
+		"M2": "QSL",
+		"M3": "73",
+		"M4": "TEST TEST TEST"
+	},
+	"CHANNELS": {
+		"0": {
+			"channelname": "HVDN",
+			"frequency": 911250000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"1": {
+			"channelname": "HAS 1",
+			"frequency": 911250000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"2": {
+			"channelname": "HAS 2",
+			"frequency": 911400000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"3": {
+			"channelname": "HAS 3",
+			"frequency": 911550000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"4": {
+			"channelname": "HAS 4",
+			"frequency": 911700000,
+			"spreadfactor": 10,
+			"codingrate4": 5,
+			"bandwidth": 250000
+		},
+		"5": {
+			"channelname": "HAS 5",
+			"frequency": 911850000,
+			"spreadfactor": 10,
+			"codingrate4": 5,
+			"bandwidth": 250000
+		},
+		"6": {
+			"channelname": "HAS 6",
+			"frequency": 912000000,
+			"spreadfactor": 10,
+			"codingrate4": 5,
+			"bandwidth": 250000
+		},
+		"7": {
+			"channelname": "HAS 7",
+			"frequency": 912400000,
+			"spreadfactor": 9,
+			"codingrate4": 5,
+			"bandwidth": 500000
+		},
+		"8": {
+			"channelname": "HAS 8",
+			"frequency": 912600000,
+			"spreadfactor": 9,
+			"codingrate4": 5,
+			"bandwidth": 500000
+		},
+		"9": {
+			"channelname": "HAS 9",
+			"frequency": 912800000,
+			"spreadfactor": 9,
+			"codingrate4": 5,
+			"bandwidth": 500000
+		}
+	}
+}
