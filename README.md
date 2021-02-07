@@ -161,7 +161,7 @@ For many LoRa projects out there, the use case has the ESP32 as either a receive
 
 The ESP32 has two cores with Core 1 being the default for all operations. What we did was within <mark>void setup()</mark>  is create a LoRa services task called <mark>HasTRX</mark> and pin it to Core 0. <mark>HasTRX</mark> runs nested loops with a LoRa receive function<mark> conditional inner-loop</mark> and an endless outer-loop. Meanwhile WebSockets is running in an endless-loop within <mark>void main()</mark> on Core 1.
 
-When <mark>HasTRX</mark> sees a LoRa packet, it captures the message and invokes a callback that sends a WebSocket client broadcast. When a TX request comes from the (browser) client via WebSockets, the <mark>sendLORA</mark> function is calledt and once the message is transmit we trip the HasTRX <mark>conditional inner-loop</mark> to restart. We use this trick for if we want to change channels from the client which includes frequency, spreadfactor, coding, and bandwidth.
+When <mark>HasTRX</mark> sees a LoRa packet, it captures the message and invokes a callback that sends a WebSocket client broadcast. When a TX request comes from the (browser) client via WebSockets, the <mark>sendLORA</mark> function is called, transmits the LoRa packet, and then trips the HasTRX <mark>conditional inner-loop</mark> to restart. We also use this trick if we want to change channels from the client which includes frequency, spreadfactor, coding, and bandwidth.
 
 Admittedly this is less than perfect but reflects our evolving education and persistence for a more perfect union of a true LoRa transciver with WebSockets.
 
