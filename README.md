@@ -32,7 +32,7 @@ I keep a home directory for all my source code so I suggest creating your own be
 
 ```
 mkdir ~/source
-git clone https://github.com/joecupano/hasty-esther.git
+git clone https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32.git
 ```
 
 Once cloned, go ahead and start Visual Studio Code and open the folder of where the cloned repo is in. You should get a screen similar to below.
