@@ -1,11 +1,14 @@
 //
-//  HASviolet-ESP32.ino (DualCore)
+//  HASviolet-ESP32
 //
 //
-//  201210129-1330
+//  20210320-1700
 //     
 //
 
+
+// Chosen board
+#define HELTEC_WIFI_LORA_32_V2            // Board selected
 
 //
 // LIBRARIES
@@ -14,7 +17,10 @@
 #include "Arduino.h"
 #include "Time.h"
 #include "TimeLib.h"
+#include "HASviolet_config.h"
+#ifdef HELTEC_WIFI_LORA_32_V2
 #include "heltec.h"
+#endif
 #include "WiFi.h"
 #include "ESPAsyncWebServer.h"
 #include <WebSocketsServer.h>
@@ -22,17 +28,12 @@
 #include "ArduinoJson.h"
 #include "FS.h"
 #include "FreeRTOS.h"
-#include "HASviolet_boards.h"
-#include "HASviolet_channels.h"
-#include "HASviolet_config.h"
-#include "HASviolet_logo.h"
+#include "HVDN_logo.h"
 
 
 //
 // DEFINES
 //
-#define HELTEC_WIFI_LORA_32_V2            // Board selected
-//#define TTGO_TBEAM
 #define WIFI_POLL_DELAY 500
 #define WIFI_POLL_TRIES 20
 #define BAND 911250000                    // you can set band here directly, ( 868E6,915E6 )
@@ -44,8 +45,8 @@
 boolean MyRX_Reset;                       // A trigger to restart LoRa Radio
 
 //Set Servers
-const uint16_t WEB_PORT = 80;
-const uint16_t WS_PORT = 8000;
+const uint16_t WEB_PORT = 8000;
+const uint16_t WS_PORT = 8888;
 
 //Task handles
 TaskHandle_t TaskTRX;
@@ -56,22 +57,25 @@ TaskHandle_t TaskWebsox;
 // byte localaddressLORA = 0xBB;          // LoRa address of this device (irrelevant)
 byte destinationLORA = 0xFF;              // LoRa destination to send to (broadcast default)
 
+// Default settings before HASviolet.json load
+String channel = "HV1";                   // Channel
+String rfmodule = "RFM9X";                // RF Module
+String modemconfig = "Bw125Cr45Sf128";    // Modemstring Radiohead
+int modem = 0;
 int frequency = 911250000;                // HASviolet default settings for safe LoRa module init
 int spreadfactor = 7;
 int codingrate4 = 8;
 int bandwidth = 125000;
-int txpwr = TXPWR;
-
+int txpwr = 11;
 String mycall = "NOCALL";
 String myssid = "00";
+String mybeacon = "QRZ? QRZ? QRZ?";       // Baacon Message
 String dstcall = "BEACON";                // Destination Call ( BEACON )
 String dstssid = "99";                    // Destination SSID ( 99 )
-String mybeacon = "QRZ? QRZ? QRZ?";       // Baacon Message
+
 String lastMsgRX = " ";                   // Last received message
-String payloadS = "";
-String lastMsgTX = " ";                // Last transmitted 
-//String lastWebsRX = "None";             // Last received Websocket message
-//String lastWebsTX = "None";             // Last transmitted Websocket message
+String payloadS = "";                     // LoRa message App layer payload
+String lastMsgTX = " ";                   // Last transmitted 
 
 // Create Servers
 AsyncWebServer server(WEB_PORT);
@@ -130,11 +134,39 @@ void HasTRX(void *pvParameters) {
     MyRX_Reset = false;
     // Initialize LoRa
     LoRa.setSyncWord(0xFF);                 // Set for LoRa Broadcast
+    LoRa.disableCrc();
     LoRa.setFrequency(frequency);
-    LoRa.setSignalBandwidth(bandwidth);
-    LoRa.setCodingRate4(codingrate4);
-    LoRa.setSpreadingFactor(spreadfactor);
     LoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
+    if (modemconfig == "Bw125Cr45Sf128") {
+        LoRa.setSignalBandwidth(125000);
+        LoRa.setSpreadingFactor(7);
+        LoRa.setCodingRate4(8);
+      }
+      else if (modemconfig == "Bw500Cr45Sf128") {
+        LoRa.setSignalBandwidth(500000);
+        LoRa.setSpreadingFactor(7);
+        LoRa.setCodingRate4(5);
+      }
+      else if (modemconfig == "Bw31_25Cr48Sf512") {
+        LoRa.setSignalBandwidth(31250);
+        LoRa.setSpreadingFactor(7);
+        LoRa.setCodingRate4(8);
+      }
+      else if (modemconfig ==  "Bw125Cr48Sf4096") {
+        LoRa.setSignalBandwidth(125000);
+        LoRa.setSpreadingFactor(12);
+        LoRa.setCodingRate4(8);
+      }
+      else if (modemconfig ==  "Bw125Cr45Sf2048") {
+        LoRa.setSignalBandwidth(125000);
+        LoRa.setSpreadingFactor(8);
+        LoRa.setCodingRate4(5);
+      }
+      else {
+        LoRa.setSignalBandwidth(125000);
+        LoRa.setSpreadingFactor(7);
+        LoRa.setCodingRate4(8);
+    }
     LoRa.receive();
     Serial.print("CPU("); 
     Serial.print(xPortGetCoreID());
@@ -281,21 +313,33 @@ void onWebSocketEvent(uint8_t clientID, WStype_t type, uint8_t * payload, size_t
         webSocket.sendTXT(clientID, "ACK:TXPWR:HIGH");
       }
       
-      //CHANNEL
+      //CHANNEL NEW
       if (payloadS.indexOf("SET:TUNER:") >= 0) {
         webSocket.sendTXT(clientID, "ACK:SET:TUNER:");
         String localjunk = getSubString(payloadS,':',0);
         String localjunk2 = getSubString(payloadS,':',1);
-        String localfrequency = getSubString(payloadS,':',2);
-        String localspreadfactor = getSubString(payloadS,':',3);
-        String localcodingrate4 = getSubString(payloadS,':',4);
-        String localbandwidth = getSubString(payloadS,':',5);   
+        String localmodemconfig = getSubString(payloadS,':',2);
+        String localfrequency = getSubString(payloadS,':',3);
+        modemconfig = localmodemconfig;
         frequency = localfrequency.toInt();
-        spreadfactor = localspreadfactor.toInt();
-        codingrate4 = localcodingrate4.toInt();
-        bandwidth = localbandwidth.toInt();
         MyRX_Reset = true;
       }
+
+      //CHANNEL ORG
+      //if (payloadS.indexOf("SET:TUNER:") >= 0) {
+      //  webSocket.sendTXT(clientID, "ACK:SET:TUNER:");
+      //  String localjunk = getSubString(payloadS,':',0);
+      //  String localjunk2 = getSubString(payloadS,':',1);
+      //  String localfrequency = getSubString(payloadS,':',2);
+      //  String localspreadfactor = getSubString(payloadS,':',3);
+      //  String localcodingrate4 = getSubString(payloadS,':',4);
+      //  String localbandwidth = getSubString(payloadS,':',5);   
+      // frequency = localfrequency.toInt();
+      //  spreadfactor = localspreadfactor.toInt();
+      // codingrate4 = localcodingrate4.toInt();
+      //  bandwidth = localbandwidth.toInt();
+      //  MyRX_Reset = true;
+      //}
       
       //TX
       if (payloadS.indexOf("TX:") >= 0) {
@@ -341,16 +385,20 @@ void loadJsonFile() {
       Serial.println("]");
     }
     // Place JSON into Variables
-    mycall = (const char*)doc["CURRENT"]["mycall"];
-    myssid = (const char*)doc["CURRENT"]["mySSID"];
-    dstcall = (const char*)doc["CURRENT"]["dstcall"];
-    dstssid = (const char*)doc["CURRENT"]["dstssid"];
-    mybeacon = (const char*)doc["CURRENT"]["mybeacon"];
-    frequency = int(doc["CURRENT"]["frequency"]);
-    spreadfactor = int(doc["CURRENT"]["spreadfactor"]);
-    codingrate4 = int(doc["CURRENT"]["codingrate4"]);
-    bandwidth = int(doc["CURRENT"]["bandwidth"]);
-    txpwr = int(doc["CURRENT"]["txpwr"]);
+    channel	= (const char*)doc["RADIO"]["channel"];
+		rfmodule = (const char*)doc["RADIO"]["rfmodule"];
+		modemconfig = (const char*)doc["RADIO"]["modemconfig"];
+		modem = int(doc["RADIO"]["modem"]);
+    frequency = int(doc["RADIO"]["frequency"]);
+    spreadfactor = int(doc["RADIO"]["spreadfactor"]);
+    codingrate4 = int(doc["RADIO"]["codingrate4"]);
+    bandwidth = int(doc["RADIO"]["bandwidth"]);
+    txpwr = int(doc["RADIO"]["txpwr"]);
+    mycall = (const char*)doc["CONTACT"]["mycall"];
+    myssid = (const char*)doc["CONTACT"]["mySSID"];
+    mybeacon = (const char*)doc["CONTACT"]["mybeacon"];
+    dstcall = (const char*)doc["CONTACT"]["dstcall"];
+    dstssid = (const char*)doc["CONTACT"]["dstssid"];
     configFile.close();
   }
   Serial.println(" 200: JSON loaded");
@@ -426,8 +474,8 @@ void setup() {
   initWebSockets();
   #ifdef HAS_OLED
   initOLED();
-  #endif
   logo();
+  #endif
   Serial.println("INIT: COMPLETE");
   Serial.println("=====================================");
   Serial.println();

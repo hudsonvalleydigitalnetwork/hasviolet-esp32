@@ -1,0 +1,107 @@
+//
+// HASviolet_channels.h
+//
+// ** Release:  20210312-1500
+//
+
+// FREQUENCY and BANDWIDTH are in Hz
+
+#ifdef CHANNEL_HV0
+#define CHANNELNAME "HV0"
+#define MODEM 0
+#define FREQUENCY 911250000
+#endif
+
+#ifdef CHANNEL_HV1
+#define CHANNELNAME "HV1"
+#define MODEM 0
+#define FREQUENCY 911250000
+#endif
+
+#ifdef CHANNEL_HV2
+#define CHANNELNAME "HV2"
+#define MODEM 2
+#define FREQUENCY 911400000
+#endif
+
+#ifdef CHANNEL_HV3
+#define CHANNELNAME "HV3"
+#define MODEM 3
+#define FREQUENCY 911250000
+#endif
+
+#ifdef CHANNEL_HV4
+#define CHANNELNAME "HV4"
+#define MODEM 4
+#define FREQUENCY 911250000
+#endif
+
+#ifdef CHANNEL_HV5
+#define CHANNELNAME "HV5"
+#define MODEM 1
+#define FREQUENCY 911250000
+#endif
+
+#ifdef CHANNEL_HV6
+#define CHANNELNAME "HV6"
+#define MODEM 2
+#define FREQUENCY 911300000
+#endif
+
+#ifdef CHANNEL_HV7
+#define CHANNELNAME "HV7"
+#define MODEM 3
+#define FREQUENCY 911300000
+#endif
+
+#ifdef CHANNEL_HV8
+#define CHANNELNAME "HV8"
+#define MODEM 0
+#define FREQUENCY 911300000
+#endif
+
+#ifdef CHANNEL_HV9
+#define CHANNELNAME "HV9"
+#define MODEM 1
+#define FREQUENCY 911300000
+#endif
+
+#ifdef MODEM_0
+#define MODEMCONFIG "Bw125Cr45Sf128"
+#define MODEMNAME "MEDIUM"
+#define SPREADFACTOR 7
+#define CODINGRATE4 8
+#define BANDWIDTH 125000
+#endif
+
+#ifdef MODEM_1
+#define MODEMCONFIG "Bw500Cr45Sf128"
+#define MODEMNAME "FAST-SHRT"
+#define SPREADFACTOR 7
+#define CODINGRATE4 5
+#define BANDWIDTH 500000
+#endif
+
+#ifdef MODEM_2
+#define MODEMCONFIG "Bw31_25Cr48Sf512"
+#define MODEMNAME "SLOW-LNG1"
+#define SPREADFACTOR 7
+#define CODINGRATE4 8
+#define BANDWIDTH 312500
+#endif
+
+#ifdef MODEM_3
+#define MODEMCONFIG "Bw125Cr48Sf4096"
+#define MODEMNAME "SLOW-LNG2"
+#define SPREADFACTOR 12
+#define CODINGRATE4 8
+#define BANDWIDTH 125000
+#endif
+
+#ifdef MODEM_4
+#define MODEMCONFIG "Bw125Cr45Sf2048"
+#define MODEMNAME "SLOW-LNG3"
+#define SPREADFACTOR 8
+#define CODINGRATE4 5
+#define BANDWIDTH 125000
+#endif

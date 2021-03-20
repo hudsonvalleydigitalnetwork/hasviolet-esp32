@@ -42,12 +42,7 @@
 // #define SD_SCK 14
 // #define SD_MISO 2
 // #define SD_MOSI 15
-#define OLED_SDA 21
-#define OLED_SCL 22
-#define OLED_RST NOT_A_PIN
-#define OLED_WIDTH 128
-#define OLED_HEIGHT 64
-// https://github.com/cyberman54/ESP32-Paxcounter/blob/825520a20f1a1b7a9ac5e725484c2704bcb8117b/src/hal/ttgobeam.h
+#define RF_PACONFIG_PASELECT_PABOOST true
 #define GPS_SERIAL 9600, SERIAL_8N1, GPIO_NUM_12, GPIO_NUM_15
 #endif
 
@@ -66,10 +61,10 @@
 #define PABOOST true
 #define BAND 911250000  // Band setting ( 868E6,915E6 )
 // OLED
-#define HAS_OLED                          //Uncomment Board or Peripheral features
-#define SCL 15    // GPIO15 -- OLED_SCL
-#define SDA 4     // GPIO4  -- OLED_SDA
-#define RST 16    // GPIO16 -- OLED_RST
+//#define HAS_OLED       // Uncomment Board or Peripheral features
+#define OLED_SCL 15    // GPIO15 -- OLED_SCL
+#define OLED_SDA 4     // GPIO4  -- OLED_SDA
+#define OLED_RST 16    // GPIO16 -- OLED_RST
 // VEXT
 #define VEXT 21   // GPIO21 -- VEXT_CONTROL
 #endif

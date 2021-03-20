@@ -2,7 +2,6 @@
 	"RADIO": {
 		"channel": "HV1",
 		"rfmodule": "RFM9X",
-		"modemconfig": "Bw125Cr45Sf128",
 		"modem": 0,
 		"frequency": 911250000,
 		"spreadfactor": 7,

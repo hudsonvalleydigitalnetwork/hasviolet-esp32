@@ -1,0 +1,96 @@
+{
+	"RADIO": {
+		"channel": 1,
+		"channelname": "HVDN",
+		"frequency": 911250000,
+		"spreadfactor": 7,
+		"codingrate4": 8,
+		"bandwidth": 125000,
+		"txpwr": 7
+	},
+	"CONTACT": {
+		"mycall": "NOCALL",
+		"myssid": "99",
+		"mybeacon": "quack quack",
+		"dstcall": "BEACON",
+		"dstssid": "99"
+	},
+	"MACROS": {
+		"M1": "QRZ",
+		"M2": "QSL",
+		"M3": "73",
+		"M4": "TEST TEST TEST"
+	},
+	"CHANNELS": {
+		"0": {
+			"channelname": "MEDIUM",
+			"frequency": 911250000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"1": {
+			"channelname": "MEDIUM",
+			"frequency": 911250000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"2": {
+			"channelname": "SLOW",
+			"frequency": 911250000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 31250
+		},
+		"3": {
+			"channelname": "SLOW2",
+			"frequency": 911250000,
+			"spreadfactor": 12,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"4": {
+			"channelname": "FAST",
+			"frequency": 911250000,
+			"spreadfactor": 8,
+			"codingrate4": 5,
+			"bandwidth": 125000
+		},
+		"5": {
+			"channelname": "2SLOW",
+			"frequency": 911400000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 31250
+		},
+		"6": {
+			"channelname": "2SLOW2",
+			"frequency": 911400000,
+			"spreadfactor": 12,
+			"codingrate4": 8,
+			"bandwidth": 125000
+		},
+		"7": {
+			"channelname": "MEDIUM",
+			"frequency": 911400000,
+			"spreadfactor": 8,
+			"codingrate4": 5,
+			"bandwidth": 1250000
+		},
+		"8": {
+			"channelname": "FAST",
+			"frequency": 911400000,
+			"spreadfactor": 8,
+			"codingrate4": 5,
+			"bandwidth": 125000
+		},
+		"9": {
+			"channelname": "3SLOW",
+			"frequency": 912800000,
+			"spreadfactor": 7,
+			"codingrate4": 8,
+			"bandwidth": 31250
+		}
+	}
+}

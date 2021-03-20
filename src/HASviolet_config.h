@@ -14,6 +14,3 @@
 //Client credentials
 #define WWW_USER "radio"
 #define WWW_KEY "admin"
-
-//TX Power
-#define TXPWR 7

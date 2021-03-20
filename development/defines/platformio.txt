@@ -25,6 +25,45 @@ lib_deps =
 	links2004/WebSockets@^2.3.5
 	ArduinoJson
 
+[env:ttgo-lora32-v1]
+board = ttgo-lora32-v1
+build_flags = -DTTGO_LORA_V1
+	-DARDUINO_LORA
+	-DHAS_OLED
+	-I./src
+lib_deps = 
+	sandeepmistry/LoRa@^0.8.0
+	olikraus/U8g2@^2.28.8
+
+[env:ttgo-lora32-v2]
+board = ttgo-lora32-v1
+build_flags = -DTTGO_LORA_V2
+	-DARDUINO_LORA
+	-DHAS_OLED
+	-I./src
+lib_deps = 
+	sandeepmistry/LoRa@^0.8.0
+	olikraus/U8g2@^2.28.8
+
+[env:ttgo-lora32-v2-rl]
+board = ttgo-lora32-v1
+build_flags = -DTTGO_LORA_V2
+	-DRL_SX1276
+	-DHAS_OLED
+	-I./src
+lib_deps = 
+	sandeepmistry/LoRa@^0.8.0
+	olikraus/U8g2@^2.28.8
+
+[env:ttgo-lora32-tbeam]
+board = ttgo-lora32-v1
+build_flags = -DTTGO_TBEAM
+	-DARDUINO_LORA
+	-I./src
+lib_deps = 
+	sandeepmistry/LoRa@^0.8.0
+	mikalhart/TinyGPS@0.0.0-alpha+sha.db4ef9c97a
+
 [env:heltec_wifi_lora_32_V2]
 platform = espressif32
 board = heltec_wifi_lora_32_V2

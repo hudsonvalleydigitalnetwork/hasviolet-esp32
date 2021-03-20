@@ -2,8 +2,9 @@
 #
 #   hasVIOLET Client Javascript
 #
+#       Ⓒ2021 Joe Cupano, NE2Z
 #
-#       RELEASE: 20210311-2100
+#       RELEASE: 20210213-2100
 #
 #
 */
@@ -105,15 +106,8 @@ var current_operation = "";
 var previous_entry = "";
 var current_entry = "";
 var myHostname = location.hostname;
-
-// UnComment out if connecting to RPi
-// var wsURI = "wss://" + myHostname + ":8000/wss";					//  TEST Websocket URI 
-// var url = "https://" + myHostname + ":8000/cfg/hasVIOLET.json";  //  JSON file location
-
-// UnComment if connecting to ESP32
-var wsURI = "ws://" + myHostname + ":8888/ws";				      	//  TEST Websocket URI 
-var url = "http://" + myHostname + ":8000/hasVIOLET.json";		//  JSON file location
-
+var wsURI = "wss://" + myHostname + ":8000/wss";					//  TEST Websocket URI 
+var url = "https://" + myHostname + ":8000/cfg/hasVIOLET.json";		//  JSON file location
 var getHasJson = new XMLHttpRequest();								//  Holds JSON from Radio
 
 var rxDisplay = [];													//  Holds whole RX window as 27 lines of text
