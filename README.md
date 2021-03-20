@@ -6,23 +6,12 @@ Best efforts are made to document as much of the build and code as possible in u
 
 ## Table of Contents
 
-- [Quick Start](#Quick-Start)
-
 - [Build It](#Build-It)
 
 - [Watch It](#Watch-It)
 
 - [Hack It](#Hack-It)
 
-# Quick Start
-
-The quickest way to get started with HASviolet ESP32 is to
-
-- Buy a [HiLetgo ESP32 LoRa v2 device](https://www.amazon.com/gp/product/B07WHRS2XG/) aka Heltec_wifi_lora_32_V2
-- Download the [latest release](https://https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32/releases)
-- Upload the firmware and SPIFFs BIN files to the device using your favorite ESP32 Flash tool
-
-Alternatively, you can compile the firmware yourself by cloning this repo and following the instructions in the "Build It" section.
 
 # Build It
 
