@@ -1,6 +1,8 @@
 # HASviolet ESP32
 
-HASviolet ESP32 is a (very much) work-in-progress LoRa transceiver node that is part of the HASviolet project. Best efforts are made to document as much of the build and code as possible in unvarnished language.
+HASviolet ESP32 is a (very much) work-in-progress LoRa transceiver node that is part of the HASviolet project. It is built to have as much parity as possible to [HASviolet on RPi](https://github.com/hudsonvalleydigitalnetwork/hasviolet) starting with the web user interface experience. While the Web interface for the RPi version uses SSL/TLS and User authentication, at this time HASviolet ESP32 uses neither. It will be included in a future update.
+
+Best efforts are made to document as much of the build and code as possible in unvarnished language.
 
 ## Table of Contents
 
@@ -16,9 +18,9 @@ HASviolet ESP32 is a (very much) work-in-progress LoRa transceiver node that is 
 
 The quickest way to get started with HASviolet ESP32 is to
 
-- Buy a [HiLetgo ESP32 LoRa v2 device](https://www.amazon.com/gp/product/B07WHRS2XG/)
-- Download the [latest release](https://github.com/joecupano/hasty-esther/releases)
-- Upload the BIN file to the device using your favorite ESP32 Flash tool
+- Buy a [HiLetgo ESP32 LoRa v2 device](https://www.amazon.com/gp/product/B07WHRS2XG/) aka Heltec_wifi_lora_32_V2
+- Download the [latest release](https://https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32/releases)
+- Upload the firmware and SPIFFs BIN files to the device using your favorite ESP32 Flash tool
 
 Alternatively, you can compile the firmware yourself by cloning this repo and following the instructions in the "Build It" section.
 
@@ -32,24 +34,24 @@ I keep a home directory for all my source code so I suggest creating your own be
 
 ```
 mkdir ~/source
-git clone https://github.com/joecupano/hasty-esther.git
+git clone https://https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32.git
 ```
 
 Once cloned, go ahead and start Visual Studio Code and open the folder of where the cloned repo is in. You should get a screen similar to below.
 
 ![vsc-pio-view.png](docs/vscpio-view.png)
 
-Edit `platformio.ini` to suit your needs. If you are flashing a <a href="https://www.amazon.com/gp/product/B07WHRS2XG/" target="_blank">HiLetgo ESP32 LoRa v2 board</a> then you will probably not have to edit anything in `platformio.ini` but make sure <mark>`upload_port`</mark> is set to the correct device (such as<mark> /dev/ttyUSB0</mark>) which may vary depending on your operating system and other devices you have connected.
+If you are flashing a <a href="https://www.amazon.com/gp/product/B07WHRS2XG/" target="_blank">HiLetgo ESP32 LoRa v2 board</a> then you will not have to edit anything in `platformio.ini` but make sure <mark>`upload_port`</mark> is set to the correct device (such as<mark> /dev/ttyUSB0</mark>) which may vary depending on your operating system and other devices you have connected.
 
 ## Build firmware
 
-To test that the firmware is compiling correctly without flashing it to a device either use the terming that is part of VSC or open a terminal and navidate to the clones repo folder and run the following
+To test that the firmware is compiling correctly without flashing it to a device either use the PIO build tools available by clock on the PIO icon at left or open a terminal and navigate to the clones repo folder and run the following
 
 ```
 pio run
 ```
 
-This will compile all libraries and main firmware files. The resulting binary is stored as `.pio/build/heltec_wifi_lora_32_v2/firmware.bin`
+This will compile all libraries and main firmware files. The resulting binary is stored as `.pio/build/heltec_wifi_lora_32_v2/firmware.bin` relative to your repo directory.
 
 ## Flash firmware
 
@@ -67,25 +69,9 @@ followed by flashing the code:
 pio run -t upload
 ```
 
-By default, PlatformIO builds and flashes firmware for the <a href="https://www.amazon.com/gp/product/B07WHRS2XG/" target="_blank">HiLetgo ESP32 LoRa v2 board</a>. If you would like to build for another supported board, select the corresponding build environment. For example to build and flash the firmware and file system for the ESP32 TTG0 V1 board, use the following, 
+## Other Boards
 
-```
-pio run -e ttgo-lora32-v1 -t upload -t uploadfs
-```
-
-## Creating Binary for Release
-
-A full binary image can be created by reading the flash contents of a ESP32 that is flashed with the latest release of the firmware. To do this, run the following command,
-
-```
-esptool.py -p /dev/ttyUSB0 -b 921600 read_flash 0 0x400000 esp_flash.bin
-```
-
-This can then be flashed to a new device like so,
-
-```
-esptool.py -p /dev/ttyUSB0 --baud 460800 write_flash 0x00000 esp_flash.bin
-```
+All ESP32 development was done with the Heltec WiFi LoRa 32 V2 platform. Besides it being a solid platform in it's own right, we wanted avoid complicating development with platform version issues we have seen with other boards. As developing for those baords becomess better defined by the community we will include instructions and binaries for those platforms.
 
 # Watch It
 
@@ -129,7 +115,7 @@ HASviolet ESP32 is made up of three parts;  radio (LoRa transceiver), server, an
 - Client
   
   - Web browser that runs the HASviolet ESP32 Web UI interface
-  - Browser connects to Web service on ESP32 device and loads an [HTML file](https://github.com/joecupano/hasty-esther/blob/main/data/hasVIOLET_INDEX.html) loaded with HTML5, CSS, and Javascript
+  - Browser connects to Web service on ESP32 device and loads an [HTML file](https://https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32/blob/main/data/hasVIOLET_INDEX.html) loaded with HTML5, CSS, and Javascript
   - On load, Javascript runs and connects to the Websocket service on the ESP32 device to establish a websocket session
   - Received data, data to be transmitted, and radio commandsare commuicated over the websocket session
 
@@ -167,7 +153,7 @@ Admittedly this is less than perfect but reflects our evolving education and per
 
 ### Radio
 
-Our focus has been on ESP32 boards with embedded LoRa modules either from [HopeRF]([LoRa module - HOPE MicroElectronics](https://www.hoperf.com/modules/lora/index.html)) or [Semtech](https://www.semtech.com/lora/lora-products) connected via SPI. For now we have kept with the LoRa libraries included with each board. We will revisit if enough pain ensues down the line. We've been contemplating some simple GPIO, pull-up resistor, and interrupt line inclusions to avoid some software hellholeshardware solution .
+Our focus has been on ESP32 boards with embedded LoRa modules either from [HopeRF]([LoRa module - HOPE MicroElectronics](https://www.hoperf.com/modules/lora/index.html)) or [Semtech](https://www.semtech.com/lora/lora-products) connected via SPI. 
 
 ### Client
 
@@ -194,11 +180,3 @@ Building and uploading a SPIFFS image is only necessary if you change any files 
 ```
 pio run -t uploadfs
 ```
-
-## Avoiding Library Hell
-
-Some useful hints for developing this firmware using platformio are included here,
-
-- It may be a good idea to delete the libdeps folder prior to rebuilding, as old, out-dated libraries could case conflits. To do this, `rm -rf .pio/libdeps`.
-- If you would like to make changes to a specific library you can clone the library into the `firmware/lib` folder that is created after running `pio run` and then comment it out or remove it from the `lib_deps` list in the `platformio.ini` file.
-- If you're including new libraries in the firmware, for PlatformIO, you wil need to add them to `platformio.ini` under `lib_deps`.
