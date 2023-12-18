@@ -1,5 +1,5 @@
 //
-// HASviolet_cmdmsgs.h
+// SIGnora_cmdmsgs.h
 //
 // ** Release:  20210311-1330
 //

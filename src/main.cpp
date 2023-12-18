@@ -1,8 +1,8 @@
 //
-//  HASviolet-ESP32
+//  SIGnora
 //
 //
-//  20210320-1700
+//  20231220-1700
 //     
 //
 
@@ -17,7 +17,7 @@
 #include "Arduino.h"
 #include "Time.h"
 #include "TimeLib.h"
-#include "HASviolet_config.h"
+#include "SIGnora_config.h"
 #ifdef HELTEC_WIFI_LORA_32_V2
 #include "heltec.h"
 #endif
@@ -57,12 +57,12 @@ TaskHandle_t TaskWebsox;
 // byte localaddressLORA = 0xBB;          // LoRa address of this device (irrelevant)
 byte destinationLORA = 0xFF;              // LoRa destination to send to (broadcast default)
 
-// Default settings before HASviolet.json load
+// Default settings before SIGnora.json load
 String channel = "HV1";                   // Channel
 String rfmodule = "RFM9X";                // RF Module
 String modemconfig = "Bw125Cr45Sf128";    // Modemstring Radiohead
 int modem = 0;
-int frequency = 911250000;                // HASviolet default settings for safe LoRa module init
+int frequency = 911250000;                // SIGnora default settings for safe LoRa module init
 int spreadfactor = 7;
 int codingrate4 = 8;
 int bandwidth = 125000;
@@ -249,19 +249,19 @@ void onFavRequest(AsyncWebServerRequest* request) {
 }
 
 void onIndexRequest(AsyncWebServerRequest* request) {
-  request->send(SPIFFS, "/hasVIOLET_INDEX.html", "text/html");
+  request->send(SPIFFS, "/SIGnora_INDEX.html", "text/html");
 }
 
 void onCssRequest(AsyncWebServerRequest* request) {
-  request->send(SPIFFS, "/hasVIOLET.css", "text/css");
+  request->send(SPIFFS, "/SIGnora.css", "text/css");
 }
 
 void onJsRequest(AsyncWebServerRequest* request) {
-  request->send(SPIFFS, "/hasVIOLET.js", "text/javascript");
+  request->send(SPIFFS, "/SIGnora.js", "text/javascript");
 }
 
 void onJsonRequest(AsyncWebServerRequest* request) {
-  request->send(SPIFFS, "/hasVIOLET.json", "application/json");
+  request->send(SPIFFS, "/SIGnora.json", "application/json");
 }
 
 /// WebSockets
@@ -369,18 +369,18 @@ void initSPIFFS() {
 }
 
 void loadJsonFile() {
-  File configFile = SPIFFS.open("/hasVIOLET.json", "r");
+  File configFile = SPIFFS.open("/SIGnora.json", "r");
   DynamicJsonDocument doc(1024);
   // The filter: it contains "true" for each value we want to keep
   StaticJsonDocument<500> filter;
   filter["CURRENT"] = true;
   if(!configFile){
-    Serial.println("Failed to open hasVIOLET.json for reading");
+    Serial.println("Failed to open SIGnora.json for reading");
     return;
   } else {
     DeserializationError error = deserializeJson(doc, configFile, DeserializationOption::Filter(filter));
     if (error) {
-      Serial.print("Error parsing hasVIOLET.json [");
+      Serial.print("Error parsing SIGnora.json [");
       Serial.print(error.c_str());
       Serial.println("]");
     }
@@ -431,9 +431,9 @@ void initWiFi() {
 void initWebServer() {
   server.on("/", HTTP_GET, onIndexRequest);
   server.on("/favicon.ico", HTTP_GET, onFavRequest);
-  server.on("/hasVIOLET.css", HTTP_GET, onCssRequest);
-  server.on("/hasVIOLET.js", HTTP_GET, onJsRequest);
-  server.on("/hasVIOLET.json", HTTP_GET, onJsonRequest);
+  server.on("/SIGnora.css", HTTP_GET, onCssRequest);
+  server.on("/SIGnora.js", HTTP_GET, onJsRequest);
+  server.on("/SIGnora.json", HTTP_GET, onJsonRequest);
   server.begin();
   Serial.println(" 400: Webserver initialized");
 }
@@ -463,7 +463,7 @@ void setup() {
   Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
   #endif
   initSerial();
-  Serial.println("INIT: HASviolet ESP32");
+  Serial.println("INIT: SIGnora ESP32");
   Serial.println("=====================================");
   Serial.print(" 000: Setup running on core ");
   Serial.println(xPortGetCoreID());
