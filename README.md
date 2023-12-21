@@ -1,6 +1,6 @@
-# SIGnora
+# HASviolet ESP32
 
-SIGnora is a (very much) work-in-progress multi-use LoRa platform.
+HASviolet ESP32 is a (very much) work-in-progress LoRa transceiver node that is part of the HASviolet project. It is built to have as much parity as possible to [HASviolet on RPi](https://github.com/hudsonvalleydigitalnetwork/hasviolet) starting with the web user interface experience. While the Web interface for the RPi version uses SSL/TLS and User authentication, at this time HASviolet ESP32 uses neither. It will be included in a future update.
 
 Best efforts are made to document as much of the build and code as possible in unvarnished language.
 
@@ -19,11 +19,11 @@ All coding was performed using [Visual Studio Code](https://code.visualstudio.co
 
 ## Create your Workspace
 
-I keep a home directory for all my source code so I suggest creating your own before cloning the SIGnora repo.
+I keep a home directory for all my source code so I suggest creating your own before cloning the HASviolet ESP32 repo.
 
 ```
 mkdir ~/source
-git clone https://https://github.com/joecupano/SIGnora.git
+git clone https://https://github.com/hudsonvalleydigitalnetwork"Upload and Monitor" command/hasviolet-esp32.git
 ```
 
 Once cloned, go ahead and start Visual Studio Code and open the folder of where the cloned repo is in. You should get a screen similar to below.
@@ -60,7 +60,7 @@ From the same PIO Proejct Tasks menu, click on 'Monitor' under the Heltect board
 After that, press the RST button on the ESP32 and you should see the following boot sequeunce;
 
 ```
-INIT: SIGnora
+INIT: HASviolet ESP32
 =====================================
  000: Setup running on core 1
  100: SPIFFs initialized
@@ -72,7 +72,7 @@ INIT: SIGnora
 INIT: COMPLETE
 =====================================
 
-CPU(0): Task (re)start - SIGnora (LoRa)
+CPU(0): Task (re)start - HasTRX (LoRa)
 CPU(1): Task (re)start - WiFi, Web, WebSox
   LOOP: Started
 ```
@@ -81,7 +81,7 @@ CPU(1): Task (re)start - WiFi, Web, WebSox
 
 ## Architecture Model
 
-SIGnora is made up of three parts;  radio (LoRa transceiver), server, and client.
+HASviolet ESP32 is made up of three parts;  radio (LoRa transceiver), server, and client.
 
 - Server
   
@@ -94,8 +94,8 @@ SIGnora is made up of three parts;  radio (LoRa transceiver), server, and client
 
 - Client
   
-  - Web browser that runs the SIGnora Web UI interface
-  - Browser connects to Web service on ESP32 device and loads an [HTML file](https://https://github.com/joecupano/SIGnora/blob/main/data/SIGnora_INDEX.html) loaded with HTML5, CSS, and Javascript
+  - Web browser that runs the HASviolet ESP32 Web UI interface
+  - Browser connects to Web service on ESP32 device and loads an [HTML file](https://https://github.com/hudsonvalleydigitalnetwork/hasviolet-esp32/blob/main/data/hasVIOLET_INDEX.html) loaded with HTML5, CSS, and Javascript
   - On load, Javascript runs and connects to the Websocket service on the ESP32 device to establish a websocket session
   - Received data, data to be transmitted, and radio commandsare commuicated over the websocket session
 
@@ -109,15 +109,15 @@ This is the sequence of initialization (<mark>INIT</mark>) events that occurs do
 
 - **100** SPIFF system initializes
 
-- **200** Loading of the <mark>SIGnora.json</mark> file from the SPIFFs image. The server is updated with the JSON configuration
+- **200** Loading of the <mark>hasVIOLET.json</mark> file from the SPIFFs image. The server is updated with the JSON configuration
 
-- **300** WiFi service starts first looking for an existing known network and if none then starst its own AP. The WiFi service will first try to connect to any <mark>WIFI_SSID</mark> and <mark>WIFI_KEY</mark> that was specified in <mark>SIGnora_config.h</mark> at compile time. If it cannot connect to an existgin WiFi specified, it will create a WiFI Access Point with the <mark>WIFI_APSSID</mark> and <mark>WIFI_APKEY</mark> specified in <mark>SIGnora_config.h</mark> at compile time. 
+- **300** WiFi service starts first looking for an existing known network and if none then starst its own AP. The WiFi service will first try to connect to any <mark>WIFI_SSID</mark> and <mark>WIFI_KEY</mark> that was specified in <mark>HASviolet_config.h</mark> at compile time. If it cannot connect to an existgin WiFi specified, it will create a WiFI Access Point with the <mark>WIFI_APSSID</mark> and <mark>WIFI_APKEY</mark> specified in <mark>HASviolet_config.h</mark> at compile time. 
 
 - **400** Webserver service is started with callbacks for each of the HTML, CSS. JS, JSON files. A favorico.ico is included in the SPIFFs image for browsers that (annoyingly) look for such image objects
 
 - **500** Websocket service is started with callback for processing websocket messages
 
-- **600** If OLED display is included, it is initialzied and will display the HVDN logo as compiled from <mark>SIGnora_logo.h</mark>
+- **600** If OLED display is included, it is initialzied and will display the HVDN logo as compiled from <mark>HASviolet_logo.h</mark>
 
 - INIT is complete and LoRa services are started as a task on a separate core
 
@@ -139,13 +139,13 @@ Our focus has been on ESP32 boards with embedded LoRa modules either from [HopeR
 
 When the web browser connects to the server, it loads four files in the following order;
 
-- **SIGnora_INDEX.html** Besides the skeleteon look of UI, it tells the browser to load  up the CSS and JS files in that order
+- **hasVIOLET_INDEX.html** Besides the skeleteon look of UI, it tells the browser to load  up the CSS and JS files in that order
 
-- **SIGnora.css** Makes the UI look pretty and add texture to actions on screen
+- **hasVIOLET.css** Makes the UI look pretty and add texture to actions on screen
 
-- **SIGnora.js** Javascript code that does all the "heavy lifting." It communicates all actions as WebSocket messages to the server that include changing channels, radio settings, as well as messages to be transmitted and those received Code also includes UI usabailityt such as defining macros and UI housekeeping. The code is well documented and includes numerous logs viewable from the browsers inspect window in the consoles tab.
+- **hasVIOLET.js** Javascript code that does all the "heavy lifting." It communicates all actions as WebSocket messages to the server that include changing channels, radio settings, as well as messages to be transmitted and those received Code also includes UI usabailityt such as defining macros and UI housekeeping. The code is well documented and includes numerous logs viewable from the browsers inspect window in the consoles tab.
 
-- **SIGnora.json** a client configuration (JSON) file loaded into from the server that includes radio, contact, macor, and channel settings. These settings are stoed in variabels and can be changed through various commands includ CMDline in the transmit window.
+- **hasVIOLET.json** a client configuration (JSON) file loaded into from the server that includes radio, contact, macor, and channel settings. These settings are stoed in variabels and can be changed through various commands includ CMDline in the transmit window.
 
 - **favicon.ico** A small graphic icon file to shut up browsers that look always look for icons when connecting to a server. 
 

@@ -1,9 +1,10 @@
 /*
 #
-#   SIGnora Client Javascript
+#   hasVIOLET Client Javascript
 #
+#       Ⓒ2021 Joe Cupano, NE2Z
 #
-#     RELEASE: 20231220-1500
+#       RELEASE: 20210213-2100
 #
 #
 */
@@ -13,7 +14,7 @@
 /* -
 */
 
-/* Object to hold imported SIGnora.json */
+/* Object to hold imported hasVIOLET.json */
 var myRadio = {
 	RADIO: {
 		channel: 1,
@@ -106,7 +107,7 @@ var previous_entry = "";
 var current_entry = "";
 var myHostname = location.hostname;
 var wsURI = "wss://" + myHostname + ":8000/wss";					//  TEST Websocket URI 
-var url = "https://" + myHostname + ":8000/cfg/SIGnora.json";		//  JSON file location
+var url = "https://" + myHostname + ":8000/cfg/hasVIOLET.json";		//  JSON file location
 var getHasJson = new XMLHttpRequest();								//  Holds JSON from Radio
 
 var rxDisplay = [];													//  Holds whole RX window as 27 lines of text
@@ -479,7 +480,7 @@ function rxwinMSG(message) {
 
 function rxwinMSGhelp() {
 	rxDisplay [26] = "-"
-	rxDisplay [25] = "................ SIGnora WebUI Instructions .............."
+	rxDisplay [25] = "................ hasVIOLET WebUI Instructions .............."
 	rxDisplay [24] = "-"
 	rxDisplay [23] = "......... KEYPAD .......... .......... RF CONTROLS ........."
 	rxDisplay [22] = "-"
@@ -528,7 +529,7 @@ function msgENTRY() {
 /* -
 */
 
-// Get SIGnora.json on page load
+// Get hasVIOLET.json on page load
 getHasJson.open('GET', url, true);
 getHasJson.send(null);
 getHasJson.onload = function() {
@@ -536,7 +537,7 @@ getHasJson.onload = function() {
 		myRadio = JSON.parse(getHasJson.responseText)
 	}
 }
-console.log("INIT: SIGnora.JSON loaded");
+console.log("INIT: hasVIOLET.JSON loaded");
 // Channel assignments
 myChannels = Object.keys(myRadio.CHANNELS);
 console.log("INIT:     CH 0,1,2: ", myRadio.CHANNELS[0].channelname, myRadio.CHANNELS[1].channelname, myRadio.CHANNELS[2].channelname);

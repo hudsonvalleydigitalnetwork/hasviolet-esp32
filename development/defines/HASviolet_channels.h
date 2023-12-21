@@ -1,7 +1,7 @@
 //
-// SIGnora_channels.h
+// HASviolet_channels.h
 //
-// ** Release:  20231220-1700
+// ** Release:  20210312-1500
 //
 
 // FREQUENCY and BANDWIDTH are in Hz

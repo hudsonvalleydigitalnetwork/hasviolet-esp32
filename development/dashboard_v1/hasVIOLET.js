@@ -1,8 +1,8 @@
 //
 //
-//  SIGnora
+//  HASviolet ESP32
 //
-//  RELEASE: 20231220-1700
+//  RELEASE: 20210128-0200
 //
 //
 
@@ -10,7 +10,7 @@
 // VARIABLES    
 //
 
-/* Object to hold imported SIGnora.json */
+/* Object to hold imported hasVIOLET.json */
 var myRadio = {
 	RADIO: {
 		channel: "1",
@@ -149,7 +149,7 @@ var previous_entry = "";
 var current_entry = "";
 var myHostname = location.hostname;
 var wsURI = "ws://" + myHostname + ":8000/ws";			//  TEST Websocket URI 
-var url = "http://" + myHostname + "/SIGnora.json";	//  JSON file location
+var url = "http://" + myHostname + "/hasVIOLET.json";	//  JSON file location
 var getHasJson = new XMLHttpRequest();					//  Holds JSON from Radio
 var rxDisplay = [];										//  Holds whole RX window as 27 lines of text
 var rxDispY = 26;										//  Numbe of rowa for RX Window
@@ -466,7 +466,7 @@ function rxwinMSG(message) {
 
 function rxwinMSGhelp() {
 	rxDisplay [26] = "-"
-	rxDisplay [25] = "----=======---- SIGnora Instructions ----=======----"
+	rxDisplay [25] = "----=======---- hasVIOLET Instructions ----=======----"
 	rxDisplay [24] = "-"
 	rxDisplay [23] = "- KEYPAD:"
 	rxDisplay [22] = "- 1 through 9 = HVDN RF Channels 1 through 9 "
@@ -509,7 +509,7 @@ function msgENTRY() {
 // MAIN
 //
 
-// Get SIGnora.json on page load
+// Get hasVIOLET.json on page load
 getHasJson.open('GET', url, true);
 getHasJson.send(null);
 console.log("INIT: radioCONFIG retrieved");
