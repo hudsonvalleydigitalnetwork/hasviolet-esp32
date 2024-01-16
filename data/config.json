@@ -20,11 +20,23 @@
 		"dstcall": "BEACON",
 		"dstssid": "99"
 	},
+	"CMACROS": {
+		"C1": "BLAH",
+		"C2": "BLAH BLAH",
+		"C3": "BLAH BLAH BLAH",
+		"C4": "BLAH BLAH BLAH BLAH"
+	},
 	"MACROS": {
 		"M1": "QRZ",
 		"M2": "QSL",
 		"M3": "73",
 		"M4": "TEST TEST TEST"
+	},
+    "LORA": {
+		"SPREADFACTOR": 7,
+		"CODINGRATE4": 8,
+		"BANDWIDTH": 125000,
+		"FREQUENCY": 911250000
 	},
 	"CHANNELS": {
 		"0": {

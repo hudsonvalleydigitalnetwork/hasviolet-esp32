@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package aprs;
+
+// Position Report
+message PositionReport {
+  string callsign = 1;               // Callsign of the station
+  double latitude = 2;               // Latitude in decimal degrees
+  double longitude = 3;              // Longitude in decimal degrees
+  float altitude = 4;                // Altitude in meters
+  string comment = 5;                // Additional comment or information
+  int32 symbol_table_id = 6;         // Symbol table identifier
+  int32 symbol_code = 7;             // Symbol code
+}
+
+// Weather Report
+message WeatherReport {
+  string station_id = 1;             // Station identifier
+  float temperature = 2;             // Temperature in degrees Celsius
+  float humidity = 3;                // Humidity as a percentage
+  float wind_speed = 4;              // Wind speed in knots
+  float wind_direction = 5;          // Wind direction in degrees
+  string comment = 6;                // Additional comment or information
+}
+
+// Object Report
+message ObjectReport {
+  string object_name = 1;            // Name of the object
+  int32 symbol_table_id = 2;         // Symbol table identifier
+  int32 symbol_code = 3;             // Symbol code
+  double latitude = 4;               // Latitude in decimal degrees
+  double longitude = 5;              // Longitude in decimal degrees
+  string comment = 6;                // Additional comment or information
+}
+
+// Status Report
+message StatusReport {
+  string callsign = 1;               // Callsign of the station
+  string status_text = 2;            // Status text
+}
+
+// Message
+message AprsMessage {
+  string source_callsign = 1;        // Callsign of the sender
+  string destination_callsign = 2;   // Callsign of the recipient
+  string message_text = 3;           // Text of the message
+}
+
+// Telemetry Report
+message TelemetryReport {
+  string station_id = 1;             // Station identifier
+  repeated int32 sensor_values = 2;  // Telemetry sensor values
+}
+
+//
+// Add other fields as needed
+//
+// LoRaMessage represents a basic LoRa message with fields for device identifier, location
+// (latitude, longitude, altitude), payload data, signal strength, and an acknowledgment flag.
+// You may need to customize this definition based on the specific requirements of your LoRa
+// application and the data you want to include in your messages. Refer to the LoRaWAN 
+// specification or documentation for more details on the message formats used in LoRa
+// communication. As always, use a protobuf compiler (such as protoc) to compile this
+// .proto file into language-specific code for use in your application.
+

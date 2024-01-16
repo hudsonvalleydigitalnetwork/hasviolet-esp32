@@ -1,0 +1,44 @@
+{
+	"LORA": {
+        "spreadfactor": 7,
+        "codingrate4": 8,
+        "bandwidth": 125000,
+        "modems": {
+		    "0": {
+    			"modemconfig": "Bw125Cr45Sf128",
+	    		"modemname": "MEDIUM",
+		    	"modemspreadfactor": 7,
+			    "modemcodingrate4": 8,
+    			"modembandwidth": 125000
+	    	},
+		    "1": {
+			    "modemconfig": "Bw500Cr45Sf128",
+    			"modemname": "FAST-SHRT",
+	    		"modemspreadfactor": 7,
+		    	"modemcodingrate4": 5,
+			    "modembandwidth": 500000
+    		},
+	    	"2": {
+		    	"modemmodemconfig": "Bw31_25Cr48Sf512",
+			    "modemmodemname": "SLOW-LNG1",
+    			"modemspreadfactor": 7,
+	    		"modemcodingrate4": 8,
+		    	"modembandwidth": 31250
+    		},
+	    	"3": {
+	        	"modemconfig": "Bw125Cr48Sf4096",
+    			"modemname": "SLOW-LNG2",
+	    		"modemspreadfactor": 12,
+		    	"modemcodingrate4": 8,
+			    "modembandwidth": 125000
+    		},
+    		"4": {
+	    		"modemconfig": "Bw125Cr45Sf2048",
+		    	"modemname": "SLOW-LNG3",
+			    "modemspreadfactor": 8,
+    			"modemcodingrate4": 5,
+	    		"modembandwidth": 125000
+		    }
+	    }
+    }
+}

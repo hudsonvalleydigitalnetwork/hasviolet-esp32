@@ -1,0 +1,134 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link href="index.css" rel="stylesheet" type="text/css" />
+    <title>SIGnora</title>
+  </head>
+  <body>
+    <!--- grid container close --->
+
+    <div class="grid-container">
+
+    <!--- tuner-module --->
+
+    <div class="tuner-container">
+      <div class="tuner-display">
+        <div id="tuner-setting"><span>WAIT</span></div>
+        <div class="subdisplay-spreadfactor" id="spreadfactor-setting"> </div>
+        <div class="subdisplay-codingrate4" id="codingrate4-setting"> </div>
+        <div class="subdisplay-bandwidth" id="bandwidth-setting"> </div>
+        <div class="subdisplay-channelname" id="channelname-setting"> </div>
+      </div>
+      <div class="tuner-numpad">
+        <div class="numpad-btn-black"><div id="btn7" onclick="btnNUM(7)">7</div></div>
+        <div class="numpad-btn-black"><div id="btn8" onclick="btnNUM(8)">8</div></div>
+        <div class="numpad-btn-black"><div id="btn9" onclick="btnNUM(9)">9</div></div>
+        <div class="numpad-btn-brown"><div id="btnFUNC"onclick="btnFUN()">FUN</div></div>
+        <div class="numpad-btn-black"><div id="btn4" onclick="btnNUM(4)">4</div></div>
+        <div class="numpad-btn-black"><div id="btn5" onclick="btnNUM(5)">5</div></div>
+        <div class="numpad-btn-black"><div id="btn6" onclick="btnNUM(6)">6</div></div>
+        <div class="numpad-btn-brown"><div id="btnRESET" onclick="btnRESET()">RST</div></div>
+        <div class="numpad-btn-black"><div id="btn1" onclick="btnNUM(1)">1</div></div>
+        <div class="numpad-btn-black"><div id="btn2" onclick="btnNUM(2)">2</div></div>
+        <div class="numpad-btn-black"><div id="btn3" onclick="btnNUM(3)">3</div></div>
+        <div class="numpad-btn-brown"><div id="btnCLR" onclick="btnCLEAR()">CLR</div></div>
+        <div class="numpad-btn-black"><div id="btnDECIMAL" onclick="btnDEC()">&#46;</div></div>
+        <div class="numpad-btn-black"><div id="btn0" onclick="btnNUM(0)">0</div></div>
+        <div class="numpad-btn-black"><div id="btnHASH" onclick="btnHASH()">&#35;</div></div>
+        <div class="numpad-btn-orange"><div id="btnENTER" onclick="btnENTER()">ENT</div></div>
+      </div>
+    </div>
+    
+    <!--- radio-control-module --->
+
+    <div class="radio-controls-container">
+      <div class="controls-keypad">
+        <div class="keypad-btn-black"><div id="btnRADIO" onclick="btnRADIO()">TRX</div></div>
+        <div class="keypad-btn-black"><div id="btnTXPWR" onclick="btnTXPWR()">LOW</div></div>
+        <div class="keypad-btn-black"><div id="btnMODE" onclick="btnMODE()">LORA</div></div>
+        <div class="keypad-btn-black"><div id="btnGUI" onclick="btnGUI()">BASIC</div></div>
+        <div class="keypad-btn-black"><div id="btnFREQ" onclick="btnFREQ()"> </div></div>
+        <div class="keypad-btn-black"><div id="btnSF" onclick="btnSF()"> </div></div>
+        <div class="keypad-btn-black"><div id="btnBW" onclick="btnBW()"> </div></div>
+        <div class="keypad-btn-black"><div id="btnCR" onclick="btnCR()"> </div></div>
+      </div>
+    </div>
+
+    <!--- macro-control-module- --->
+
+    <div class="cmd-controls-container">
+      <div class="controls-keypad">
+        <div class="keypad-btn-brown"><div id="btnC1" onclick="btnC1()">C1</div></div>
+        <div class="keypad-btn-brown"><div id="btnC2" onclick="btnC2()">C2</div></div>
+        <div class="keypad-btn-brown"><div id="btnC3" onclick="btnC3()">C3</div></div>
+        <div class="keypad-btn-brown"><div id="btnC4" onclick="btnC4()">C4</div></div>
+        <div class="keypad-btn-grey"><div id="btnM1" onclick="btnM1()">M1</div></div>
+        <div class="keypad-btn-grey"><div id="btnM2" onclick="btnM2()">M2</div></div>
+        <div class="keypad-btn-grey"><div id="btnM3" onclick="btnM3()">M3</div></div>
+        <div class="keypad-btn-grey"><div id="btnM4" onclick="btnM4()">M4</div></div>
+      </div>
+    </div>
+
+    <!--- message-control-module --->
+
+    <div class="msg-controls-container">
+      <div class="controls-keypad">
+        <div class="keypad-btn-brown"><div id="btnCALL" onclick="btnCALL()">CALL</div></div>
+        <div class="keypad-btn-brown"><div id="btnDEST" onclick="btnDEST()">DEST</div></div>
+        <div class="keypad-btn-brown"><div id="btnHEAD" onclick="btnHEAD()">HEAD</div></div>
+        <div class="keypad-btn-brown"><div id="btnHELP" onclick="btnHELP()">HELP</div></div>
+        <div class="keypad-btn-brown"><div id="btnLOG" onclick="btnLOG()">LOG</div></div>
+        <div class="keypad-btn-brown"><div id="btnRCLR" onclick="btnRCLR()">RCLR</div></div>
+        <div class="keypad-btn-brown"><div id="btnMCLR" onclick="btnMCLR()">MCLR</div></div>
+        <div class="keypad-btn-orange"><div id="btnSEND" onclick="btnSEND()">SEND</div></div>
+      </div>
+    </div>
+
+    <!--- receiver-module --->
+
+    <div class="rx-container">
+      <!--- <textarea class="rx-window" id="msgDISPLAYED" rows="19" columns="75"></textarea> -->
+      <output class="rx-window" id="rxWIN26">0---------1---------2---------3---------4---------5---------6---------7-----</output><br>
+      <output class="rx-window" id="rxWIN25">-</output><br>
+      <output class="rx-window" id="rxWIN24">-</output><br>
+      <output class="rx-window" id="rxWIN23">-</output><br>
+      <output class="rx-window" id="rxWIN22">-</output><br>
+      <output class="rx-window" id="rxWIN21">-</output><br>
+      <output class="rx-window" id="rxWIN20">-</output><br>
+      <output class="rx-window" id="rxWIN19">-</output><br>
+      <output class="rx-window" id="rxWIN18">-</output><br>
+      <output class="rx-window" id="rxWIN17">-</output><br>
+      <output class="rx-window" id="rxWIN16">1</output><br>
+      <output class="rx-window" id="rxWIN15">-</output><br>
+      <output class="rx-window" id="rxWIN14">-</output><br>
+      <output class="rx-window" id="rxWIN13">-</output><br>
+      <output class="rx-window" id="rxWIN12">-</output><br>
+      <output class="rx-window" id="rxWIN11">-</output><br>
+      <output class="rx-window" id="rxWIN10">-</output><br>
+      <output class="rx-window" id="rxWIN9">-</output><br>
+      <output class="rx-window" id="rxWIN8">-</output><br>
+      <output class="rx-window" id="rxWIN7">2</output><br>
+      <output class="rx-window" id="rxWIN6">-</output><br>
+      <output class="rx-window" id="rxWIN5">-</output><br>
+      <output class="rx-window" id="rxWIN4">-</output><br>
+      <output class="rx-window" id="rxWIN3">-</output><br>
+      <output class="rx-window" id="rxWIN2">-</output><br>
+      <output class="rx-window" id="rxWIN1">-</output><br>
+      <output class="rx-window" id="rxWIN0">X</output><br>
+    </div>   
+
+    <!--- transmit-module --->
+
+    <div class="tx-container">
+      <textarea class="tx-window" id="msgENTRY" rows="2" columns="75"></textarea>
+    </div>
+    
+  <!--- grid container close --->
+
+  </div>
+
+  <!--- Javascript for each module --->
+
+    <script type="text/javascript" src="index.js"></script
+   </body>
+</html>

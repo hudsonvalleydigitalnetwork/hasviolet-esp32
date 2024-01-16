@@ -1,7 +1,7 @@
 //
-// HASviolet_channels.h
+// channels.h
 //
-// ** Release:  20210312-1500
+// 20231231-1000
 //
 
 // FREQUENCY and BANDWIDTH are in Hz
