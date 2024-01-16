@@ -373,13 +373,14 @@ void loadJsonFile() {
   File configFile = SPIFFS.open("/config.json", "r");
   JsonDocument doc;
   // The filter: it contains "true" for each value we want to keep
-  JsonDocument filter;
-  filter["CURRENT"] = true;
+  //JsonDocument filter;
+  //filter["CURRENT"] = true;
   if(!configFile){
     Serial.println("Failed to open config.json for reading");
     return;
   } else {
-    DeserializationError error = deserializeJson(doc, configFile, DeserializationOption::Filter(filter));
+    //DeserializationError error = deserializeJson(doc, configFile, DeserializationOption::Filter(filter));
+    DeserializationError error = deserializeJson(doc, configFile);
     if (error) {
       Serial.print("Error parsing config.json [");
       Serial.print(error.c_str());
@@ -406,27 +407,26 @@ void loadJsonFile() {
 }
 
 void initWiFi() {
-  #ifdef WIFI_SSID
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_KEY);
-  while(WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-  }
-  Serial.println(" 300: WiFi CL initialized");
+  //#ifdef WIFI_SSID
+  //WiFi.mode(WIFI_STA);
+  //WiFi.begin(WIFI_SSID, WIFI_KEY);
+  //while(WiFi.status() != WL_CONNECTED) {
+  //  delay(1000);
+  //}
+  //Serial.println(" 300: WiFi CL initialized");
   //Serial.println("310: WiFi IP  " + WiFi.localIP());
   //Serial.println("320: WiFi CL initialized");
-  #endif
+  //#endif
 
-  if (WiFi.status() != WL_CONNECTED) 
-  {
+  //if (WiFi.status() != WL_CONNECTED) 
+  //{
     WiFi.mode(WIFI_AP);
     WiFi.softAP(WIFI_APSSID, WIFI_APKEY);
     IPAddress ip = WiFi.softAPIP();
     Serial.println(" 300: WiFi AP initialized");
     //Serial.println(" 310: WiFi IP  " + ip);
     //Serial.println(" 320: WiFi AP initialized");
-  }
-  
+  //}
 }
 
 void initWebServer() {

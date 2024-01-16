@@ -7,7 +7,7 @@
 
 // WiFi AP Creds
 #define WIFI_APSSID "HASviolet"
-#define WIFI_APKEY "purple"
+#define WIFI_APKEY "purpleRAIN"
 
 //Uncomment and edit the next two lines if connecting to existing WiFi network
 #define WIFI_SSID "HomeWAN"
