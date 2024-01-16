@@ -1,4 +1,4 @@
-# SIGnora
+# HASviolet SIGnora
 
 SIGnora is the raw development branch for HASviolet ESP32. It is a work-in-progress LoRa transceiver platform for various use cases
 
