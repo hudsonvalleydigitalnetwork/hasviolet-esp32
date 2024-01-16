@@ -371,9 +371,9 @@ void initSPIFFS() {
 
 void loadJsonFile() {
   File configFile = SPIFFS.open("/config.json", "r");
-  DynamicJsonDocument doc(1024);
+  JsonDocument doc;
   // The filter: it contains "true" for each value we want to keep
-  StaticJsonDocument<500> filter;
+  JsonDocument filter;
   filter["CURRENT"] = true;
   if(!configFile){
     Serial.println("Failed to open config.json for reading");
