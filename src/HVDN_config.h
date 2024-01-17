@@ -10,8 +10,8 @@
 #define WIFI_APKEY "purpleRAIN"
 
 //Uncomment and edit the next two lines if connecting to existing WiFi network
-#define WIFI_SSID "HomeWAN"
-#define WIFI_KEY "2125551212"
+//#define WIFI_SSID "HVDN"
+//#define WIFI_KEY "defaultHVDN"
 
 //Client credentials
 #define WWW_USER "radio"
