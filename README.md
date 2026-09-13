@@ -2,15 +2,54 @@
 
 HASviolet ESP32 is a (very much) work-in-progress LoRa transceiver node that is part of the HASviolet project. It is built to have as much parity as possible to [HASviolet on RPi](https://github.com/hudsonvalleydigitalnetwork/hasviolet) starting with the web user interface experience. While the Web interface for the RPi version uses SSL/TLS and User authentication, at this time HASviolet ESP32 uses neither. It will be included in a future update.
 
+The same firmware source now builds for **13 different ESP32 boards** — see [Supported Boards](#Supported-Boards) below.
+
 Best efforts are made to document as much of the build and code as possible in unvarnished language.
 
 ## Table of Contents
+
+- [Supported Boards](#Supported-Boards)
 
 - [Build It](#Build-It)
 
 - [Watch It](#Watch-It)
 
 - [Hack It](#Hack-It)
+
+
+# Supported Boards
+
+Board choice is picked entirely by which PlatformIO environment you build — `src/main.cpp` is the same file for every board listed below, no editing required. Pick your board's environment name from the Project Tasks tree in VS Code (or `pio run -e <name>` on the CLI).
+
+### Heltec (SX1276, via the Heltec library)
+
+| Environment | Board |
+|---|---|
+| `heltec_wifi_lora_32_v1` | Heltec WiFi LoRa 32 V1 |
+| `heltec_wifi_lora_32_V2` | Heltec WiFi LoRa 32 V2 *(default)* |
+| `heltec_wifi_lora_32_v3` | Heltec WiFi LoRa 32 V3 |
+| `heltec_wireless_stick` | Heltec Wireless Stick |
+| `heltec_wireless_stick_lite` | Heltec Wireless Stick Lite |
+
+### LILYGO/TTGO (SX1276)
+
+| Environment | Board |
+|---|---|
+| `ttgo_lora32_v1` | LILYGO/TTGO LoRa32 V1 |
+| `ttgo_lora32_v2` | LILYGO/TTGO LoRa32 V2 |
+| `ttgo_lora32_v21` | LILYGO/TTGO LoRa32 V2.1 |
+| `ttgo_tbeam` | LILYGO/TTGO T-Beam v1.1 |
+
+### SX1262, via RadioLib
+
+| Environment | Board |
+|---|---|
+| `lilygo_t3_s3` | LILYGO T3-S3 |
+| `bq_station_g2` | B&Q Station G2 |
+| `tbeam_supreme` | LILYGO T-Beam Supreme (T-Beam S3-Core) |
+| `heltec_wireless_tracker` | Heltec Wireless Tracker |
+
+The `-D<BOARD>` build flags for each environment live in [platformio.ini](platformio.ini). If your board isn't on this list, it's most likely because we don't yet have real pin/config data to trust for it — see [project_state.md](project_state.md) for what's been ruled out and why, and what's next.
 
 
 # Build It
@@ -30,15 +69,15 @@ Once cloned, go ahead and start Visual Studio Code and open the folder of where 
 
 ![vsc-pio-view.png](docs/vscpio-view.png)
 
-If you are flashing a <a href="https://www.amazon.com/gp/product/B07WHRS2XG/" target="_blank">HiLetgo ESP32 LoRa v2 board</a> then you will not have to edit anything in `platformio.ini` but make sure <mark>`upload_port`</mark> is set to the correct device (such as<mark> /dev/ttyUSB0</mark>) which may vary depending on your operating system and other devices you have connected.
+Once you've picked your board from the [Supported Boards](#Supported-Boards) list above, the only thing you'll likely need to edit in `platformio.ini` is <mark>`upload_port`</mark> (and `monitor_port`), which needs to match your device (such as <mark>/dev/ttyUSB0</mark>) and may vary depending on your operating system and other devices you have connected. This also applies if you're flashing a <a href="https://www.amazon.com/gp/product/B07WHRS2XG/" target="_blank">HiLetgo ESP32 LoRa v2 board</a>, which is hardware-compatible with the Heltec/TTGO LoRa32 boards listed above.
 
 ## Build and Upload firmware
 
-Click on the alien looking icon at left, that it the PIO extention. Under Project Tasks click on the heltec board and you will see a list of commands.
+Click on the alien looking icon at left, that it the PIO extention. Under Project Tasks you'll see one entry per board from the [Supported Boards](#Supported-Boards) list above — expand the one matching your hardware and you'll see a list of commands.
 
 ![vsc-pio-cmdsview.png](docs/vsc-pio-cmds.png)
 
-With our Heltec board connected to the USB port, click on the following commands in order after each completes with SUCCEED.
+With your board connected to the USB port, click on the following commands in order after each completes with SUCCEED.
 
 - Build Filesystem Image
 - Upload Filesystem Image
@@ -47,15 +86,11 @@ With our Heltec board connected to the USB port, click on the following commands
 
 The first two commands build and upload the file system image (aka SPIFFs) with the next commands building the application and then upload the firmware.
 
-Just FYI, the BIN files generated are stored in `.pio/build/heltec_wifi_lora_32_v2` relative to your repo directory.
-
-## Other Boards
-
-All ESP32 development was done with the Heltec WiFi LoRa 32 V2 platform. Besides it being a solid platform in it's own right, we wanted avoid complicating development with platform version issues we have seen with other boards. As developing for those boards becomes better defined by the community we will include instructions and binaries for those platforms.
+Just FYI, the BIN files generated are stored in `.pio/build/<environment name>` (e.g. `.pio/build/heltec_wifi_lora_32_V2`) relative to your repo directory.
 
 # Watch It
 
-From the same PIO Project Tasks menu, click on 'Monitor' under the Heltec board to change the USB connection to a monitor port so you can see the log and debug messages generated by the microcontroller.  
+From the same PIO Project Tasks menu, click on 'Monitor' under your board's entry to change the USB connection to a monitor port so you can see the log and debug messages generated by the microcontroller.  
 
 After that, press the RST button on the ESP32 and you should see the following boot sequence;
 
@@ -133,7 +168,9 @@ Admittedly this is less than perfect but reflects our evolving education and per
 
 ### Radio
 
-Our focus has been on ESP32 boards with embedded LoRa modules either from [HopeRF]([LoRa module - HOPE MicroElectronics](https://www.hoperf.com/modules/lora/index.html)) or [Semtech](https://www.semtech.com/lora/lora-products) connected via SPI. 
+Our focus has been on ESP32 boards with embedded LoRa modules either from [HopeRF]([LoRa module - HOPE MicroElectronics](https://www.hoperf.com/modules/lora/index.html)) or [Semtech](https://www.semtech.com/lora/lora-products) connected via SPI.
+
+Two radio chip families are supported side by side, picked automatically by board environment: the older SX1276/SX1277 (via the Heltec library on Heltec boards, or `sandeepmistry/LoRa` elsewhere) and the newer SX1262/SX1268 (via [RadioLib](https://github.com/jgromes/RadioLib) on the boards listed under "SX1262, via RadioLib" above). Both are wrapped behind the same internal `hvLoRa` handle in `src/main.cpp`, so `HasTRX`/`sendLORA`/`onReceiveLORA` don't need to know or care which chip is actually on the board.
 
 ### Client
 
