@@ -13,16 +13,19 @@
 // [env:...] sections there), NOT hardcoded here, so the same main.cpp builds
 // for every supported board just by picking a different PIO environment.
 #if !defined(WIFI_LORA_32) && !defined(WIFI_LORA_32_V2) && !defined(WIFI_LORA_32_V3) \
+ && !defined(WIRELESS_STICK) && !defined(WIRELESS_STICK_LITE) \
  && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM)
 #error "No board selected. Build using one of the environments in platformio.ini (e.g. pio run -e heltec_wifi_lora_32_V2)."
 #endif
 
-// True for any Heltec WiFi LoRa 32 board (V1/V2/V3) -- these are driven by the
-// Heltec library (Heltec.begin()/Heltec.display/Heltec.LoRa) instead of
-// talking to the radio and OLED directly. WIFI_LORA_32(_V2/_V3) are the
-// Heltec library's OWN board-select macros (see heltec.h) -- they have to be
-// set exactly as it expects, not renamed to our own convention.
-#if defined(WIFI_LORA_32) || defined(WIFI_LORA_32_V2) || defined(WIFI_LORA_32_V3)
+// True for any Heltec board (WiFi LoRa 32 V1/V2/V3, Wireless Stick, Wireless
+// Stick Lite) -- these are driven by the Heltec library (Heltec.begin()/
+// Heltec.display/Heltec.LoRa) instead of talking to the radio and OLED
+// directly. These macro names are the Heltec library's OWN board-select
+// macros (see heltec.h) -- they have to be set exactly as it expects, not
+// renamed to our own convention.
+#if defined(WIFI_LORA_32) || defined(WIFI_LORA_32_V2) || defined(WIFI_LORA_32_V3) \
+ || defined(WIRELESS_STICK) || defined(WIRELESS_STICK_LITE)
 #define HASV_HELTEC_BOARD
 #endif
 
