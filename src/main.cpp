@@ -14,7 +14,8 @@
 // for every supported board just by picking a different PIO environment.
 #if !defined(WIFI_LORA_32) && !defined(WIFI_LORA_32_V2) && !defined(WIFI_LORA_32_V3) \
  && !defined(WIRELESS_STICK) && !defined(WIRELESS_STICK_LITE) \
- && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM)
+ && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM) \
+ && !defined(LILYGO_T3_S3)
 #error "No board selected. Build using one of the environments in platformio.ini (e.g. pio run -e heltec_wifi_lora_32_V2)."
 #endif
 
@@ -29,6 +30,16 @@
 #define HASV_HELTEC_BOARD
 #endif
 
+// True for any board whose LoRa radio is an SX1262/SX1268 (RadioLib) instead
+// of an SX1276/SX1277 (sandeepmistry/LoRa, or the Heltec library's bundled
+// fork of it). Radio init/TX/RX go through a RadioLibSX126x adapter object
+// (see below) that speaks the exact same method names the SX127x path uses,
+// so HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent don't need to know or
+// care which radio chip is actually on the other end of "hvLoRa".
+#if defined(LILYGO_T3_S3)
+#define HASV_SX126X_BOARD
+#endif
+
 //
 // LIBRARIES
 //
@@ -40,7 +51,11 @@
 #include "heltec.h"
 #else
 #include <SPI.h>
+#ifdef HASV_SX126X_BOARD
+#include <RadioLib.h>
+#else
 #include <LoRa.h>
+#endif
 #ifdef HAS_OLED
 #include "SSD1306Wire.h"
 #endif
@@ -84,6 +99,81 @@ SSD1306Wire genericOLED(0x3c, OLED_SDA, OLED_SCL);
 AXP20X_Class PMU;
 #endif
 
+#ifdef HASV_SX126X_BOARD
+// Adapter that makes a RadioLib SX1262 look like the old sandeepmistry
+// LoRaClass API (setSyncWord/disableCrc/.../beginPacket/write/endPacket)
+// that HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent already call through
+// "hvLoRa" -- so none of that shared code needs to know or care that the
+// radio underneath is a completely different chip talking a completely
+// different SPI protocol. Frequency/bandwidth arrive from the rest of the
+// app in Hz (this project's convention); RadioLib wants MHz/kHz, so the
+// conversion happens at the boundary here, once.
+class RadioLibSX126x {
+public:
+  RadioLibSX126x(int cs, int dio1, int rst, int busy)
+    : radio(new Module(cs, dio1, rst, busy)) {}
+
+  bool begin(long frequencyHz) {
+    int state = radio.begin(frequencyHz / 1.0e6, 125.0, 7, 5,
+                             RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 17, 8,
+                             SX126X_TCXO_VOLTAGE);
+    if (state != RADIOLIB_ERR_NONE) return false;
+    #ifdef SX126X_DIO2_AS_RF_SWITCH
+    radio.setDio2AsRfSwitch(true);
+    #endif
+    radio.setDio1Action(onDio1Rise);
+    return true;
+  }
+
+  // Pins are already bound in the constructor via Module; nothing to do.
+  void setPins(int, int, int) {}
+
+  void setSyncWord(int sw) { radio.setSyncWord((uint8_t)sw); }
+  void disableCrc() { radio.setCRC(0); }
+  void setFrequency(long freqHz) { radio.setFrequency(freqHz / 1.0e6); }
+  void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) { radio.setOutputPower(level); }
+  void setSignalBandwidth(long bwHz) { radio.setBandwidth(bwHz / 1000.0); }
+  void setSpreadingFactor(int sf) { radio.setSpreadingFactor(sf); }
+  void setCodingRate4(int denominator) { radio.setCodingRate(denominator); }
+
+  void receive() { dio1Fired = false; radio.startReceive(); }
+
+  int parsePacket() {
+    if (!dio1Fired) return 0;
+    dio1Fired = false;
+    int state = radio.readData(rxBuf, sizeof(rxBuf) - 1);
+    if (state != RADIOLIB_ERR_NONE) { rxLen = 0; return 0; }
+    rxLen = radio.getPacketLength();
+    rxPos = 0;
+    return rxLen;
+  }
+
+  int read() { return (rxPos < rxLen) ? rxBuf[rxPos++] : -1; }
+  int packetRssi() { return (int)radio.getRSSI(); }
+
+  void beginPacket() { txLen = 0; }
+  size_t write(uint8_t b) { if (txLen < sizeof(txBuf)) txBuf[txLen++] = b; return 1; }
+  size_t print(const String &s) { for (size_t i = 0; i < s.length(); i++) write((uint8_t)s[i]); return s.length(); }
+  void endPacket() { radio.transmit(txBuf, txLen); }
+
+  void dumpRegisters(Stream &out) { out.println("dumpRegisters() is not supported on SX126x/RadioLib"); }
+
+private:
+  SX1262 radio;
+  uint8_t rxBuf[256]; size_t rxLen = 0, rxPos = 0;
+  uint8_t txBuf[256]; size_t txLen = 0;
+  static volatile bool dio1Fired;
+  static void IRAM_ATTR onDio1Rise();
+};
+volatile bool RadioLibSX126x::dio1Fired = false;
+// Defined out-of-line: an IRAM_ATTR function defined inline inside the class
+// body trips the Xtensa toolchain's "literal placed after use" relocation
+// error, since the literal pool ends up on the wrong side of the jump.
+void IRAM_ATTR RadioLibSX126x::onDio1Rise() { dio1Fired = true; }
+
+RadioLibSX126x sx126xRadio(LORA_CS, SX126X_DIO1, LORA_RST, SX126X_BUSY);
+#endif
+
 // LoRa radio handle. The Heltec library owns its own LoRaClass instance as a
 // member (Heltec.LoRa) rather than the bare global "LoRa" object that
 // standalone LoRa libraries (and the Heltec library's own internals,
@@ -93,6 +183,8 @@ AXP20X_Class PMU;
 // actually set up.
 #ifdef HASV_HELTEC_BOARD
 #define hvLoRa Heltec.LoRa
+#elif defined(HASV_SX126X_BOARD)
+#define hvLoRa sx126xRadio
 #else
 #define hvLoRa LoRa
 #endif

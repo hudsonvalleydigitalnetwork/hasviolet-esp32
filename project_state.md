@@ -1,6 +1,6 @@
 # Project State — HASviolet ESP32
 
-_Last reviewed: 2026-09-13 — reflects the `ESP32-support` branch, not yet merged to `main`._
+_Last reviewed: 2026-09-13 — the multi-board work below is merged to `main`; the SX126x/RadioLib section reflects the `Radiolib` branch, in progress._
 
 ## What this is
 
@@ -67,26 +67,31 @@ All of these use an SX1276/SX1277-class radio. Board selection is entirely via `
 
 Deliberately **not** added: **RAK11200** (WisBlock module — pin map depends on which base-board slot the LoRa module sits in; needs sourcing RAK's own schematics before trusting it) and a Heltec "V2.1" (doesn't exist as distinct hardware from V2 — that naming belongs to TTGO's V2.1, not Heltec's).
 
-## Planned follow-up: SX126x radio support (RadioLib)
+## SX126x radio support (RadioLib) — in progress on `Radiolib` branch
 
-Not started. Meshtastic's own hardware docs and current buying guides converge on a set of "community favorite" ESP32-S3 boards that this branch does *not* cover, because they all use the **SX1262/SX1268** radio rather than SX1276/SX1277:
+Meshtastic's own hardware docs and current buying guides converge on a set of "community favorite" ESP32-S3 boards this project didn't cover, because they all use the **SX1262/SX1268** radio rather than SX1276/SX1277: LILYGO T3-S3, T-Beam Supreme (T-Beam S3-Core), B&Q Station G2, Heltec Wireless Tracker. (T-Deck/T-Deck Plus fit this radio family too but are intentionally excluded — their keyboard/screen add nothing to HASviolet's browser-driven UI model.)
 
-- LILYGO T3-S3
-- T-Beam Supreme (T-Beam S3-Core) — successor to the T-Beam v1.1 already supported
-- B&Q Station G2
-- Heltec Wireless Tracker
+### Done: LILYGO T3-S3 (`env:lilygo_t3_s3`)
 
-(T-Deck/T-Deck Plus also fit this radio family but are intentionally excluded from the target list below — their keyboard/screen add nothing to HASviolet's browser-driven UI model.)
+Landed and build-verified. The approach turned out cleaner than originally scoped:
 
-**Why this is a bigger lift than the boards above:** both `sandeepmistry/LoRa` and the Heltec library's bundled LoRa fork only implement the SX127x register map (direct register peek/poke, DIO0 interrupt). SX126x chips speak a completely different command-based SPI protocol, need the driver to wait on a BUSY line, and interrupt on DIO1 instead of DIO0 — none of that is a drop-in swap.
+- Added [RadioLib](https://github.com/jgromes/RadioLib) (`jgromes/RadioLib`) as the SX126x backend.
+- Rather than rewriting `HasTRX`/`sendLORA`/`onReceiveLORA`/the `GET:LORA` websocket handler for a second radio API, `main.cpp` gained a `RadioLibSX126x` adapter class that implements the *exact same method names* (`setSyncWord`, `disableCrc`, `setFrequency`, `setTxPower`, `setSignalBandwidth`, `setSpreadingFactor`, `setCodingRate4`, `receive`, `parsePacket`, `read`, `packetRssi`, `beginPacket`, `write`, `print`, `endPacket`, `dumpRegisters`) as the old SX127x `LoRaClass` — so `hvLoRa` just points at this adapter instead of `LoRa`/`Heltec.LoRa` on this board, and every one of those four call sites is untouched. `parsePacket()` is non-blocking via a DIO1-triggered ISR flag, matching the existing polling-loop control flow exactly.
+- `-D<BOARD>` pins are hand-sourced from Meshtastic's own shipping variant file (`variants/esp32s3/tlora_t3s3_v1/variant.h` in `meshtastic/firmware`), since PlatformIO's `lilygo-t3-s3` board id maps to the generic `esp32s3` variant with no board-specific `pins_arduino.h` to pull from.
+- All API calls (`Module` constructor arg order, `begin()`/`setSyncWord()`/`setCRC()`/etc. signatures) were checked against the actual installed RadioLib 7.7.1 headers, not assumed from memory.
+- One toolchain gotcha worth remembering: an `IRAM_ATTR` static method defined *inline inside* the class body trips an Xtensa "literal placed after use" linker error — has to be declared in-class and defined out-of-line instead.
 
-**Proposed approach:**
-1. Bring in [RadioLib](https://github.com/jgromes/RadioLib) (`jgromes/RadioLib`) as the radio backend for these boards — it supports SX127x *and* SX126x/SX128x under one API, so it's also a plausible path to eventually retiring the two existing radio backends in favor of one.
-2. `main.cpp` already centralizes every radio call behind the `hvLoRa` macro/four call sites (`HasTRX`, `sendLORA`, `onReceiveLORA`, the `GET:LORA` websocket handler) — RadioLib's API (a `Module` bound to NSS/DIO1/RST/BUSY, `transmit()`/`readData()` instead of `beginPacket()`/`parsePacket()`) is different enough that this becomes a second implementation behind that same seam, not a tweak to the existing one.
-3. New pin sets needed per board: NSS, DIO1, RST, BUSY (no DIO0 on SX126x). Where the board's arduino-esp32 variant already defines these (as it did for the TTGO boards above), reuse them; T-Beam Supreme and T3-S3 are newer than what's cached in this environment's arduino-esp32 core and may need pins sourced from LILYGO's schematics by hand.
-4. T-Beam Supreme and Wireless Tracker also carry GPS (and Supreme a BME280 sensor) on shared buses — out of scope for a radio-only pass, but worth flagging for whoever eventually wants telemetry.
+### Remaining three: bigger than "swap the radio," each in its own way
 
-**Effort signal:** the boards already added were a config-and-pin-map exercise catchable entirely by `pio run` (~1 day). This is a new radio driver layer whose correctness — BUSY-line timing, TCXO/DIO1 wiring per board — can't be fully confirmed by compiling alone; realistically needs the actual hardware in hand.
+Pulled real pin/config data from `meshtastic/firmware` for all three before writing anything, and each turned out to need more than RadioLib alone:
+
+- **T-Beam Supreme (`tbeam-s3-core`)** — uses an **AXP2101** PMU, not the AXP192 the existing T-Beam v1.1 support uses. That's a different chip and a different library (`lewisxhe/XPowersLib`, not `AXP202X_Library`), plus a PCF8563 RTC sharing a second I2C bus (`Wire1`). SX1262 pins themselves (CS=10, DIO1=1, BUSY=4, RESET=5) are simple enough.
+- **Station G2** — its `variant.h` is just `#include "station_common.h"`; the real pin definitions live in that shared header, not yet pulled.
+- **Heltec Wireless Tracker** — has **no OLED**; its display is an ST7735S TFT over a dedicated SPI bus, which `oledDisplay`/`SSD1306Wire` can't drive. Also has GPS and a Vext power-rail enable pin similar in spirit to T-Beam's PMU gating.
+
+None of these are just "add a `RadioLibSX126x` instance with different pins" the way T3-S3 was — each needs its own small chunk of new code (a PMU driver swap, sourcing a shared header, or a TFT display path) before the radio part even comes into play.
+
+**Effort signal going forward:** T3-S3 was closer to the original "config + pin map" boards than expected, thanks to the adapter design. The other three are each their own small feature, not a repeat of T3-S3 — and like the SX127x boards, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior) without the actual hardware in hand.
 
 ## Known issues / gaps (from code + README, not fixed by anyone yet)
 
