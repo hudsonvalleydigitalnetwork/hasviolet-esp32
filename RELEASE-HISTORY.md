@@ -2,8 +2,6 @@
 
 ## Pre-Release v0.5 — 2026-09-13
 
-Work done on the `ESP32-support` branch (not yet merged to `main`).
-
 ### Added
 - Multi-board support: **9 boards** now build from the same `src/main.cpp`, selected purely via `platformio.ini` build flags —
   Heltec WiFi LoRa 32 V1/V2/V3, Heltec Wireless Stick, Heltec Wireless Stick Lite, LILYGO/TTGO LoRa32 V1/V2/V2.1, and LILYGO/TTGO T-Beam v1.1.
