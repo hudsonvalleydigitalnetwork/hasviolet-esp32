@@ -14,7 +14,8 @@
 // for every supported board just by picking a different PIO environment.
 #if !defined(WIFI_LORA_32) && !defined(WIFI_LORA_32_V2) && !defined(WIFI_LORA_32_V3) \
  && !defined(WIRELESS_STICK) && !defined(WIRELESS_STICK_LITE) \
- && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM)
+ && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM) \
+ && !defined(LILYGO_T3_S3) && !defined(BQ_STATION_G2) && !defined(TBEAM_SUPREME) && !defined(HELTEC_WIRELESS_TRACKER)
 #error "No board selected. Build using one of the environments in platformio.ini (e.g. pio run -e heltec_wifi_lora_32_V2)."
 #endif
 
@@ -29,6 +30,38 @@
 #define HASV_HELTEC_BOARD
 #endif
 
+// True for any board whose LoRa radio is an SX1262/SX1268 (RadioLib) instead
+// of an SX1276/SX1277 (sandeepmistry/LoRa, or the Heltec library's bundled
+// fork of it). Radio init/TX/RX go through a RadioLibSX126x adapter object
+// (see below) that speaks the exact same method names the SX127x path uses,
+// so HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent don't need to know or
+// care which radio chip is actually on the other end of "hvLoRa".
+#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2) || defined(TBEAM_SUPREME) || defined(HELTEC_WIRELESS_TRACKER)
+#define HASV_SX126X_BOARD
+#endif
+
+// True for boards whose OLED is an Adafruit_SH110X-family controller
+// (SH1107 or SH1106) rather than the SSD1306 the rest of this file assumes.
+// Same idea as HASV_SX126X_BOARD: a small adapter (see below) speaks the
+// OLEDme()/logo() calls this file already makes, so nothing downstream
+// needs to know which controller it's actually talking to.
+#if defined(BQ_STATION_G2)
+#define HASV_SH1107_BOARD
+#define HASV_SH110X_BOARD
+#endif
+#if defined(TBEAM_SUPREME)
+#define HASV_SH1106_BOARD
+#define HASV_SH110X_BOARD
+#endif
+
+// Heltec Wireless Tracker has no OLED at all -- its status display is a
+// color ST7735 TFT on its own dedicated SPI bus (separate from the LoRa
+// radio's SPI pins). Same adapter idea again, applied to a completely
+// different kind of panel this time.
+#if defined(HELTEC_WIRELESS_TRACKER)
+#define HASV_ST7735_BOARD
+#endif
+
 //
 // LIBRARIES
 //
@@ -40,12 +73,26 @@
 #include "heltec.h"
 #else
 #include <SPI.h>
+#include <Wire.h>
+#ifdef HASV_SX126X_BOARD
+#include <RadioLib.h>
+#else
 #include <LoRa.h>
+#endif
 #ifdef HAS_OLED
+#ifdef HASV_SH110X_BOARD
+#include <Adafruit_SH110X.h>
+#elif defined(HASV_ST7735_BOARD)
+#include <Adafruit_ST7735.h>
+#else
 #include "SSD1306Wire.h"
+#endif
 #endif
 #ifdef HAS_AXP192
 #include <axp20x.h>
+#endif
+#ifdef HAS_AXP2101
+#include <XPowersLib.h>
 #endif
 #endif
 #include "WiFi.h"
@@ -64,13 +111,113 @@
 #define WIFI_POLL_TRIES 20
 #define BAND 911250000                    // you can set band here directly, ( 868E6,915E6 )
 
+#if defined(HASV_SH110X_BOARD) || defined(HASV_ST7735_BOARD)
+// OLEDme()/logo() (below) call oledDisplay->setTextAlignment(TEXT_ALIGN_LEFT)
+// and ->setFont(ArialMT_Plain_10) unconditionally -- those two symbols
+// normally come from the ThingPulse SSD1306Wire library, which these boards
+// don't use. Since every adapter here always left-aligns and only ever has
+// the one built-in font anyway, they're just stand-ins to satisfy the call
+// sites rather than a real SSD1306Wire include pulled in for two constants.
+#define TEXT_ALIGN_LEFT 0
+static const uint8_t ArialMT_Plain_10[] = {0};
+#endif
+
+#ifdef HASV_SH110X_BOARD
+// Adapter that makes an Adafruit_SH110X-family display (SH1107 on BQ
+// Station G2, SH1106 on T-Beam Supreme) answer to the same handful of
+// calls OLEDme()/logo()/initOLED() already make against a ThingPulse
+// SSD1306Wire -- same idea as RadioLibSX126x below, applied to the display
+// instead of the radio. Templated on the concrete Adafruit_SH110X subclass
+// since Adafruit_SH1107/Adafruit_SH1106G share an identical constructor and
+// drawing API.
+template <typename SH110xDisplay>
+class SH110XOLEDAdapter {
+public:
+  SH110XOLEDAdapter(int w, int h, TwoWire *wire, int rstPin)
+    : dev(w, h, wire, rstPin) {}
+
+  void init() { dev.begin(0x3C, true); }
+  void flipScreenVertically() { dev.setRotation(2); }
+  void setFont(const uint8_t *) {}     // only ever asked for one font; ignored
+  void setTextAlignment(int) {}        // only ever asked to left-align; ignored
+  void clear() { dev.clearDisplay(); }
+  void drawString(int x, int y, const String &text) {
+    dev.setCursor(x, y);
+    dev.setTextColor(SH110X_WHITE);
+    dev.print(text);
+  }
+  void display() { dev.display(); }
+  void drawXbm(int x, int y, int w, int h, const uint8_t *bits) {
+    dev.drawXBitmap(x, y, bits, w, h, SH110X_WHITE);
+  }
+
+private:
+  SH110xDisplay dev;
+};
+#endif
+
+#ifdef HASV_ST7735_BOARD
+// Adapter for Heltec Wireless Tracker's ST7735 color TFT -- on its own SPI
+// bus, separate from the LoRa radio's. Unlike the OLEDs above, an ST7735
+// pushes each drawing call straight to the panel (no separate frame buffer
+// to flush), so display() is a no-op here.
+//
+// NOTE: panel geometry (160x80, INITR_MINI160x80, landscape rotation) is
+// inferred from Meshtastic's own TFT_WIDTH/HEIGHT/OFFSET_X defines for this
+// exact board, not confirmed against real hardware -- see project_state.md.
+class ST7735TFTAdapter {
+public:
+  ST7735TFTAdapter(SPIClass *spi, int cs, int dc, int rst)
+    : dev(spi, cs, dc, rst) {}
+
+  void init() {
+    #ifdef VEXT_ENABLE
+    // Powers the TFT (and GPS) rail on this board; nothing on the panel
+    // responds until this is driven high.
+    pinMode(VEXT_ENABLE, OUTPUT);
+    digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE);
+    delay(10);
+    #endif
+    dev.initR(INITR_MINI160x80);
+    dev.setRotation(1);
+  }
+  void flipScreenVertically() {}        // handled by setRotation() above; no-op here
+  void setFont(const uint8_t *) {}      // only ever asked for one font; ignored
+  void setTextAlignment(int) {}         // only ever asked to left-align; ignored
+  void clear() { dev.fillScreen(ST77XX_BLACK); }
+  void drawString(int x, int y, const String &text) {
+    dev.setCursor(x, y);
+    dev.setTextColor(ST77XX_WHITE);
+    dev.print(text);
+  }
+  void display() {}                     // draws straight to the panel; nothing to flush
+  void drawXbm(int x, int y, int w, int h, const uint8_t *bits) {
+    dev.drawXBitmap(x, y, bits, w, h, ST77XX_WHITE);
+  }
+
+private:
+  Adafruit_ST7735 dev;
+};
+#endif
+
 // OLED handle. On Heltec boards Heltec.begin() already creates and owns
-// Heltec.display (an SSD1306Wire*); on every other board we create our own
-// SSD1306Wire instance from the board's OLED_SDA/OLED_SCL pins. Everything
-// below the init functions just talks to "oledDisplay" either way.
+// Heltec.display (an SSD1306Wire*); on SH110X/ST7735 boards we wrap one in
+// the adapters above; everywhere else we create our own SSD1306Wire
+// instance from the board's OLED_SDA/OLED_SCL pins. Everything below the
+// init functions just talks to "oledDisplay" either way.
 #ifdef HAS_OLED
 #ifdef HASV_HELTEC_BOARD
 #define oledDisplay Heltec.display
+#elif defined(HASV_SH1107_BOARD)
+SH110XOLEDAdapter<Adafruit_SH1107> genericSH110xOLED(128, 64, &Wire, -1);
+#define oledDisplay (&genericSH110xOLED)
+#elif defined(HASV_SH1106_BOARD)
+SH110XOLEDAdapter<Adafruit_SH1106G> genericSH110xOLED(128, 64, &Wire, -1);
+#define oledDisplay (&genericSH110xOLED)
+#elif defined(HASV_ST7735_BOARD)
+SPIClass tftSPI(HSPI);
+ST7735TFTAdapter genericTFT(&tftSPI, ST7735_CS, ST7735_RS, ST7735_RESET);
+#define oledDisplay (&genericTFT)
 #else
 SSD1306Wire genericOLED(0x3c, OLED_SDA, OLED_SCL);
 #define oledDisplay (&genericOLED)
@@ -84,6 +231,103 @@ SSD1306Wire genericOLED(0x3c, OLED_SDA, OLED_SCL);
 AXP20X_Class PMU;
 #endif
 
+// AXP2101 power-management IC (e.g. T-Beam Supreme) -- same idea as AXP192
+// above but a different chip and library (XPowersLib), and on T-Beam
+// Supreme specifically it lives on the ESP32's second I2C bus (Wire1)
+// shared with the onboard PCF8563 RTC, not the main Wire bus. XPowersLib's
+// concrete XPowersAXP2101 class keeps setPowerChannelVoltage()/
+// enablePowerOutput() protected -- they're only public on the
+// XPowersLibInterface base, which is why PMU is that interface type
+// (matching how Meshtastic's own Power.cpp uses this library) rather than
+// an XPowersAXP2101 value.
+#ifdef HAS_AXP2101
+#ifdef PMU_USE_WIRE1
+XPowersLibInterface *PMU = new XPowersAXP2101(Wire1);
+#else
+XPowersLibInterface *PMU = new XPowersAXP2101(Wire);
+#endif
+#endif
+
+#ifdef HASV_SX126X_BOARD
+// Adapter that makes a RadioLib SX1262 look like the old sandeepmistry
+// LoRaClass API (setSyncWord/disableCrc/.../beginPacket/write/endPacket)
+// that HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent already call through
+// "hvLoRa" -- so none of that shared code needs to know or care that the
+// radio underneath is a completely different chip talking a completely
+// different SPI protocol. Frequency/bandwidth arrive from the rest of the
+// app in Hz (this project's convention); RadioLib wants MHz/kHz, so the
+// conversion happens at the boundary here, once.
+class RadioLibSX126x {
+public:
+  RadioLibSX126x(int cs, int dio1, int rst, int busy)
+    : radio(new Module(cs, dio1, rst, busy)) {}
+
+  bool begin(long frequencyHz) {
+    int state = radio.begin(frequencyHz / 1.0e6, 125.0, 7, 5,
+                             RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 17, 8,
+                             SX126X_TCXO_VOLTAGE);
+    if (state != RADIOLIB_ERR_NONE) return false;
+    #ifdef SX126X_DIO2_AS_RF_SWITCH
+    radio.setDio2AsRfSwitch(true);
+    #endif
+    radio.setDio1Action(onDio1Rise);
+    return true;
+  }
+
+  // Pins are already bound in the constructor via Module; nothing to do.
+  void setPins(int, int, int) {}
+
+  void setSyncWord(int sw) { radio.setSyncWord((uint8_t)sw); }
+  void disableCrc() { radio.setCRC(0); }
+  void setFrequency(long freqHz) { radio.setFrequency(freqHz / 1.0e6); }
+  void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) {
+    #ifdef SX126X_MAX_POWER
+    if (level > SX126X_MAX_POWER) level = SX126X_MAX_POWER;
+    #endif
+    radio.setOutputPower(level);
+  }
+  void setSignalBandwidth(long bwHz) { radio.setBandwidth(bwHz / 1000.0); }
+  void setSpreadingFactor(int sf) { radio.setSpreadingFactor(sf); }
+  void setCodingRate4(int denominator) { radio.setCodingRate(denominator); }
+
+  void receive() { dio1Fired = false; radio.startReceive(); }
+
+  int parsePacket() {
+    if (!dio1Fired) return 0;
+    dio1Fired = false;
+    int state = radio.readData(rxBuf, sizeof(rxBuf) - 1);
+    if (state != RADIOLIB_ERR_NONE) { rxLen = 0; return 0; }
+    rxLen = radio.getPacketLength();
+    rxPos = 0;
+    return rxLen;
+  }
+
+  int read() { return (rxPos < rxLen) ? rxBuf[rxPos++] : -1; }
+  int packetRssi() { return (int)radio.getRSSI(); }
+
+  void beginPacket() { txLen = 0; }
+  size_t write(uint8_t b) { if (txLen < sizeof(txBuf)) txBuf[txLen++] = b; return 1; }
+  size_t print(const String &s) { for (size_t i = 0; i < s.length(); i++) write((uint8_t)s[i]); return s.length(); }
+  void endPacket() { radio.transmit(txBuf, txLen); }
+
+  void dumpRegisters(Stream &out) { out.println("dumpRegisters() is not supported on SX126x/RadioLib"); }
+
+private:
+  SX1262 radio;
+  uint8_t rxBuf[256]; size_t rxLen = 0, rxPos = 0;
+  uint8_t txBuf[256]; size_t txLen = 0;
+  static volatile bool dio1Fired;
+  static void IRAM_ATTR onDio1Rise();
+};
+volatile bool RadioLibSX126x::dio1Fired = false;
+// Defined out-of-line: an IRAM_ATTR function defined inline inside the class
+// body trips the Xtensa toolchain's "literal placed after use" relocation
+// error, since the literal pool ends up on the wrong side of the jump.
+void IRAM_ATTR RadioLibSX126x::onDio1Rise() { dio1Fired = true; }
+
+RadioLibSX126x sx126xRadio(LORA_CS, SX126X_DIO1, LORA_RST, SX126X_BUSY);
+#endif
+
 // LoRa radio handle. The Heltec library owns its own LoRaClass instance as a
 // member (Heltec.LoRa) rather than the bare global "LoRa" object that
 // standalone LoRa libraries (and the Heltec library's own internals,
@@ -93,6 +337,8 @@ AXP20X_Class PMU;
 // actually set up.
 #ifdef HASV_HELTEC_BOARD
 #define hvLoRa Heltec.LoRa
+#elif defined(HASV_SX126X_BOARD)
+#define hvLoRa sx126xRadio
 #else
 #define hvLoRa LoRa
 #endif
@@ -509,6 +755,10 @@ void initOLED() {
   #ifdef HAS_OLED
   #ifdef HASV_HELTEC_BOARD
   oledDisplay->init();
+  #elif defined(HASV_ST7735_BOARD)
+  // ST7735 is SPI, not I2C -- no Wire.begin() here; the adapter's own
+  // init() brings up its dedicated SPI bus.
+  oledDisplay->init();
   #else
   Wire.begin(OLED_SDA, OLED_SCL);
   oledDisplay->init();
@@ -538,6 +788,33 @@ void initPMU() {
 }
 #endif
 
+#ifdef HAS_AXP2101
+void initPMU() {
+  // T-Beam Supreme: LoRa radio, OLED, and sensors all run off 3.3V rails
+  // gated by the AXP2101 PMU, reached over the ESP32's second I2C bus.
+  // Rails/voltages match Meshtastic's own AXP2101 init for this board
+  // (src/Power.cpp, LILYGO_TBEAM_S3_CORE branch); GNSS (ALDO4), the M.2
+  // slot (DCDC3), and the SD card (BLDO1) are left off since nothing here
+  // uses them.
+  #ifdef PMU_USE_WIRE1
+  Wire1.begin(I2C_SDA1, I2C_SCL1);
+  #else
+  Wire.begin();
+  #endif
+  if (PMU->init()) {
+    PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);   // sensors/OLED/PCF8563 RTC VDD
+    PMU->enablePowerOutput(XPOWERS_ALDO1);
+    PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);   // required baseline rail (sensor comms)
+    PMU->enablePowerOutput(XPOWERS_ALDO2);
+    PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);   // LoRa radio VDD
+    PMU->enablePowerOutput(XPOWERS_ALDO3);
+    Serial.println(" 050: AXP2101 PMU initialized");
+  } else {
+    Serial.println(" ERR: AXP2101 PMU init failed - LoRa/OLED may be unpowered");
+  }
+}
+#endif
+
 #ifndef HASV_HELTEC_BOARD
 void initLoRaRadio() {
   // Heltec boards get this for free from Heltec.begin(); everyone else
@@ -555,7 +832,7 @@ void initLoRaRadio() {
 //
 
 void setup() {
-  #ifdef HAS_AXP192
+  #if defined(HAS_AXP192) || defined(HAS_AXP2101)
   initPMU();
   #endif
   #ifdef HASV_HELTEC_BOARD
