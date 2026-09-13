@@ -1,12 +1,12 @@
 # Project State — HASviolet ESP32
 
-_Last reviewed: 2026-09-13 — the multi-board work below is merged to `main`; the SX126x/RadioLib section reflects the `Radiolib` branch, in progress._
+_Last reviewed: 2026-09-13 — the SX127x multi-board work below is merged to `main` (via `ESP32-support`); the SX126x/RadioLib section reflects the `Radiolib` branch, complete and pushed but not yet merged._
 
 ## What this is
 
 HASviolet ESP32 is a work-in-progress firmware for an ESP32 board that acts as a **LoRa transceiver node** with a **web/WebSocket UI**, built to have UI/UX parity with the sister project [HASviolet on RPi](https://github.com/hudsonvalleydigitalnetwork/hasviolet). It targets amateur-radio-style LoRa messaging: browser client connects over WiFi, sends/receives text over a WebSocket session, and the ESP32 bridges that to LoRa TX/RX.
 
-Built with **PlatformIO** (Arduino framework). Author develops in VS Code + PlatformIO extension on Linux. `main` only builds for the Heltec WiFi LoRa 32 V2; this branch expands that to nine boards (see below), all sharing SX127x-class radios — see the SX126x follow-up section for what's deliberately not covered yet.
+Built with **PlatformIO** (Arduino framework). Author develops in VS Code + PlatformIO extension on Linux. `main` builds for nine SX127x boards; the `Radiolib` branch adds four more on SX1262, for **13 supported boards total** across the two.
 
 No SSL/TLS and no user authentication are implemented yet on the ESP32 side (unlike the RPi version) — called out explicitly in the README as a known gap to be addressed later.
 
@@ -15,7 +15,7 @@ No SSL/TLS and no user authentication are implemented yet on the ESP32 side (unl
 Three conceptual parts, one physical device:
 
 - **Server** — ESP32 running Web + WebSocket services on Core 1, LoRa comms on Core 0 (FreeRTOS task `HasTRX` pinned to core 0 via `xTaskCreatePinnedToCore`). This requires a dual-core chip — see the SX126x/C3/C6 note below.
-- **Radio** — SX1276-class LoRa module, driven either via the Heltec library (Heltec boards) or directly via `sandeepmistry/LoRa` + per-board pins (TTGO/T-Beam) behind a shared `hvLoRa` macro in `main.cpp`.
+- **Radio** — either SX1276-class (Heltec library, or `sandeepmistry/LoRa` + per-board pins for TTGO/T-Beam) or, on `Radiolib`-branch boards, SX1262-class via RadioLib and a `RadioLibSX126x` adapter — all behind a shared `hvLoRa` macro in `main.cpp` so the rest of the file doesn't care which.
 - **Client** — Static files served from SPIFFS: `hasVIOLET_INDEX.html` → loads `hasVIOLET.css` + `hasVIOLET.js` → JS opens a WebSocket to the device and drives the whole UI (channel/radio settings, TX/RX text, macros, CMDline).
 
 Boot sequence (from `setup()` in [src/main.cpp](src/main.cpp)) prints numbered INIT stages: 000 core start → 100 SPIFFS → 200 JSON config load → 300 WiFi (STA, falls back to self-hosted AP) → 400 web server → 500 WebSockets → 600 OLED. HasTRX (LoRa) task then starts on core 0; `loop()` on core 1 just pumps `webSocket.loop()`.
@@ -29,7 +29,7 @@ Communication protocol between client and server is a simple string-command sche
 - [src/HVDN_logo.h](src/HVDN_logo.h) — compiled bitmap logo for OLED splash.
 - [data/](data) — SPIFFS image contents actually served by the device: `hasVIOLET_INDEX.html`, `.css`, `.js`, `.json` (channel/contact/macro config), `favicon.ico`, plus a `.crt`/`.key` pair (present but unused — no TLS wired up in `main.cpp` yet, consistent with the README's stated gap).
 - [development/](development) — **not part of the active build**; holds two alternate/parallel dashboard UI trees (`dashboard_v1`, `dashboard_v2`) and a `defines/` folder with `HASviolet_boards.h` (pin maps for TTGO LoRa v1/v2, TTGO T-Beam, Heltec), `HASviolet_channels.h` (channel presets HV0–HV5+ with frequency/modem), and `HASviolet_cmdmsgs.h` (protocol command constants). These look like a staging area for multi-board support and a v2 UI that hasn't been merged into `src`/`data` yet.
-- [platformio.ini](platformio.ini) — nine `[env:...]` sections, one per supported board (see "Board support" below); board choice lives entirely in build flags, `src/main.cpp` has no per-board source. Default env (`pio run` with no `-e`) is still `heltec_wifi_lora_32_V2` for back-compat.
+- [platformio.ini](platformio.ini) — 13 `[env:...]` sections on `Radiolib` (9 on `main`), one per supported board (see "Board support" below); board choice lives entirely in build flags, `src/main.cpp` has no per-board source. Default env (`pio run` with no `-e`) is still `heltec_wifi_lora_32_V2` for back-compat.
 - [releases/](releases) — prebuilt `.bin` firmware + SPIFFS image for the Heltec board, for users who just want to flash without building.
 - [docs/](docs) — an ODT user guide plus screenshots referenced from the README.
 - [include/](include), [lib/](lib), [test/](test) — stock PlatformIO scaffolding, effectively empty (just README placeholders).
@@ -45,11 +45,13 @@ Last 6 commits on `main`:
 4dea493 INIT
 80b6f98 Update README
 ```
-The two `INIT` commits attempted a project rename/rebrand to **"SIGnora"** (renaming `hasVIOLET.*` client files, `HASviolet_*.h` headers, and README text to SIGnora, and deleting the prebuilt release binaries). Both were fully reverted immediately after, so `main` is currently back to the pre-rename **HASviolet** state with the release binaries restored. Working tree is clean; nothing in flight on this branch beyond that revert.
+The two `INIT` commits attempted a project rename/rebrand to **"SIGnora"** (renaming `hasVIOLET.*` client files, `HASviolet_*.h` headers, and README text to SIGnora, and deleting the prebuilt release binaries). Both were fully reverted immediately after, so `main` was back to the pre-rename **HASviolet** state with the release binaries restored before any of the work below started.
 
-## Board support (this branch)
+Since then: `ESP32-support` (README fixes, `project_state.md`, `RELEASE-HISTORY.md`, the 9-board SX127x work) has been merged to `main`. `Radiolib` (the 4-board SX126x work) is pushed but not yet merged — see "Suggested next steps."
 
-`platformio.ini` now has nine build environments, all verified with a real `pio run -e <env>` against the espressif32 toolchain (not just written and assumed):
+## Board support — SX127x boards (`main`, via `ESP32-support`)
+
+`platformio.ini` has nine build environments for these, all verified with a real `pio run -e <env>` against the espressif32 toolchain (not just written and assumed):
 
 | Env | Board | Chip | Radio path |
 |---|---|---|---|
@@ -65,7 +67,11 @@ The two `INIT` commits attempted a project rename/rebrand to **"SIGnora"** (rena
 
 All of these use an SX1276/SX1277-class radio. Board selection is entirely via `-D<BOARD>` build flags; `src/main.cpp` dispatches on those through a shared `HASV_HELTEC_BOARD`/`hvLoRa` abstraction rather than per-board branches scattered through the file.
 
-Deliberately **not** added: **RAK11200** (WisBlock module — pin map depends on which base-board slot the LoRa module sits in; needs sourcing RAK's own schematics before trusting it) and a Heltec "V2.1" (doesn't exist as distinct hardware from V2 — that naming belongs to TTGO's V2.1, not Heltec's).
+Deliberately **not** added: **RAK11200** (WisBlock module — pin map depends on which base-board slot the LoRa module sits in; needs sourcing RAK's own schematics before trusting it) and a Heltec "V2.1" (doesn't exist as distinct hardware from V2 — that naming belongs to TTGO's V2.1, not Heltec's; confirmed against Meshtastic's own repo, where `heltec_v2` and `heltec_v2.1` both build on the identical `heltec_wifi_lora_32_V2` PlatformIO board id).
+
+**Checked against Meshtastic's actual `variants/` directory** (not just device names — each variant's `board =` line): 8 of these 9 map to a real Meshtastic-supported device (`heltec_v1`/`v2`/`v3`, `heltec_wsl_v2.1`, `tlora_v1`/`v1_3`/`v2`, `tlora_v2_1_16`/`_18`/`_tcxo`, `tbeam`). Two things worth knowing:
+- **`heltec_wireless_stick`** (plain, non-Lite) is **not** currently a Meshtastic-supported device — only the Lite variant is. Still useful to this project, just not a Meshtastic overlap.
+- **`ttgo_lora32_v2`** uses a distinct PlatformIO board id (`ttgo-lora32-v2`) that no current Meshtastic variant builds against — their "tlora_v2" naming actually builds on the `ttgo-lora32-v1` profile. Same hardware family, not a separate Meshtastic build target.
 
 ## SX126x radio support (RadioLib) — complete on `Radiolib` branch
 
@@ -114,8 +120,9 @@ This board has **no OLED at all** — its display is a color **ST7735 TFT** on i
 
 ## Suggested next steps (not yet started)
 
-1. Decide the fate of the `development/` dashboard v1/v2 trees — merge one into `data/`+`src/`, or document why both are kept.
-2. Confirm `HASviolet_config.h` values are placeholders, or move real secrets out of version control (e.g., a gitignored local config).
-3. Implement or explicitly schedule the TLS/auth work called out in the README.
-4. Scope and implement the SX126x/RadioLib follow-up above.
+1. Merge `Radiolib` into `main` (currently pushed, PR not yet opened).
+2. Decide the fate of the `development/` dashboard v1/v2 trees — merge one into `data/`+`src/`, or document why both are kept.
+3. Confirm `HASviolet_config.h` values are placeholders, or move real secrets out of version control (e.g., a gitignored local config).
+4. Implement or explicitly schedule the TLS/auth work called out in the README.
 5. Source real pin data for RAK11200 and add it to the board matrix.
+6. Get any of the 13 boards on actual hardware to confirm what compiling alone can't: BUSY-line timing, TCXO/DIO1 wiring, PMU register behavior, and (Wireless Tracker specifically) TFT panel geometry.

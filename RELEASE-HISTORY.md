@@ -1,5 +1,22 @@
 # Release History
 
+## Pre-Release v0.6 — 2026-09-13
+
+Work done on the `Radiolib` branch (pushed, not yet merged to `main`), continuing from v0.5.
+
+### Added
+- SX126x radio support via [RadioLib](https://github.com/jgromes/RadioLib), bringing the total to **13 supported boards**: LILYGO T3-S3, B&Q Station G2, LILYGO T-Beam Supreme (T-Beam S3-Core), and Heltec Wireless Tracker — the four Meshtastic community-favorite ESP32-S3 boards scoped as a follow-up in v0.5.
+- `RadioLibSX126x`: an adapter class implementing the same method names the existing SX127x `LoRaClass` API uses, so `HasTRX`/`sendLORA`/`onReceiveLORA`/the `GET:LORA` websocket handler needed no changes to support the new radio chip.
+- `SH110XOLEDAdapter<T>`: a templated adapter covering both SH1107 (Station G2) and SH1106 (T-Beam Supreme) OLED controllers, plus `ST7735TFTAdapter` for Wireless Tracker's color TFT — its one board with no OLED at all.
+- AXP2101 PMU support (`lewisxhe/XPowersLib`) for T-Beam Supreme, alongside the existing AXP192 path for T-Beam v1.1.
+- All board pins/rail assignments hand-sourced from Meshtastic's own shipping firmware config (`meshtastic/firmware`), not guessed.
+
+### Changed
+- `project_state.md`: SX126x section marked complete; board-support tables split by branch; cross-checked all 13 boards against Meshtastic's actual `variants/` directory rather than device names alone — found that `heltec_wireless_stick` (plain, non-Lite) isn't actually a Meshtastic-supported device, and `ttgo_lora32_v2` uses a board id no current Meshtastic variant builds against, even though both remain useful to this project.
+
+### Verification
+All 13 board environments (9 from v0.5 + 4 new) build clean via `pio run -e <env>`, including regression checks across every existing board family after each new addition.
+
 ## Pre-Release v0.5 — 2026-09-13
 
 Work done on the `ESP32-support` branch (not yet merged to `main`).
