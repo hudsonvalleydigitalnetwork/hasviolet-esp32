@@ -8,18 +8,42 @@
 
 
 // Chosen board
-#define HELTEC_WIFI_LORA_32_V2            // Board selected
+//
+// The board is selected by a -D<BOARD> build flag in platformio.ini (see the
+// [env:...] sections there), NOT hardcoded here, so the same main.cpp builds
+// for every supported board just by picking a different PIO environment.
+#if !defined(WIFI_LORA_32) && !defined(WIFI_LORA_32_V2) && !defined(WIFI_LORA_32_V3) \
+ && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM)
+#error "No board selected. Build using one of the environments in platformio.ini (e.g. pio run -e heltec_wifi_lora_32_V2)."
+#endif
+
+// True for any Heltec WiFi LoRa 32 board (V1/V2/V3) -- these are driven by the
+// Heltec library (Heltec.begin()/Heltec.display/Heltec.LoRa) instead of
+// talking to the radio and OLED directly. WIFI_LORA_32(_V2/_V3) are the
+// Heltec library's OWN board-select macros (see heltec.h) -- they have to be
+// set exactly as it expects, not renamed to our own convention.
+#if defined(WIFI_LORA_32) || defined(WIFI_LORA_32_V2) || defined(WIFI_LORA_32_V3)
+#define HASV_HELTEC_BOARD
+#endif
 
 //
 // LIBRARIES
 //
 
 #include "Arduino.h"
-#include "Time.h"
 #include "TimeLib.h"
 #include "HASviolet_config.h"
-#ifdef HELTEC_WIFI_LORA_32_V2
+#ifdef HASV_HELTEC_BOARD
 #include "heltec.h"
+#else
+#include <SPI.h>
+#include <LoRa.h>
+#ifdef HAS_OLED
+#include "SSD1306Wire.h"
+#endif
+#ifdef HAS_AXP192
+#include <axp20x.h>
+#endif
 #endif
 #include "WiFi.h"
 #include "ESPAsyncWebServer.h"
@@ -27,7 +51,6 @@
 #include "SPIFFS.h"
 #include "ArduinoJson.h"
 #include "FS.h"
-#include "FreeRTOS.h"
 #include "HVDN_logo.h"
 
 
@@ -37,6 +60,39 @@
 #define WIFI_POLL_DELAY 500
 #define WIFI_POLL_TRIES 20
 #define BAND 911250000                    // you can set band here directly, ( 868E6,915E6 )
+
+// OLED handle. On Heltec boards Heltec.begin() already creates and owns
+// Heltec.display (an SSD1306Wire*); on every other board we create our own
+// SSD1306Wire instance from the board's OLED_SDA/OLED_SCL pins. Everything
+// below the init functions just talks to "oledDisplay" either way.
+#ifdef HAS_OLED
+#ifdef HASV_HELTEC_BOARD
+#define oledDisplay Heltec.display
+#else
+SSD1306Wire genericOLED(0x3c, OLED_SDA, OLED_SCL);
+#define oledDisplay (&genericOLED)
+#endif
+#endif
+
+// AXP192 power-management IC (e.g. TTGO T-Beam v1.1). It gates the 3.3V
+// rails the LoRa radio and GPS run on, so it has to be enabled before those
+// peripherals will respond to anything.
+#ifdef HAS_AXP192
+AXP20X_Class PMU;
+#endif
+
+// LoRa radio handle. The Heltec library owns its own LoRaClass instance as a
+// member (Heltec.LoRa) rather than the bare global "LoRa" object that
+// standalone LoRa libraries (and the Heltec library's own internals,
+// confusingly, expose under the same name) provide -- so on Heltec boards
+// the bare "LoRa" symbol in scope here is a *different*, never-initialized
+// object. hvLoRa always points at whichever one Heltec.begin()/initLoRaRadio()
+// actually set up.
+#ifdef HASV_HELTEC_BOARD
+#define hvLoRa Heltec.LoRa
+#else
+#define hvLoRa LoRa
+#endif
 
 //
 // VARIABLES
@@ -117,15 +173,15 @@ void HasWebsox(void *pvParameters) {
 void OLEDme(String myOLEDmsg)
 {
   myOLEDmsg = myOLEDmsg.substring(0,20);
-  #ifdef HELTEC_WIFI_LORA_32_V2
-  Heltec.display->clear();
-  Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-  Heltec.display->setFont(ArialMT_Plain_10);
-  Heltec.display->drawString(0, 15, myOLEDmsg);
-  Heltec.display->display();
+  #ifdef HAS_OLED
+  oledDisplay->clear();
+  oledDisplay->setTextAlignment(TEXT_ALIGN_LEFT);
+  oledDisplay->setFont(ArialMT_Plain_10);
+  oledDisplay->drawString(0, 15, myOLEDmsg);
+  oledDisplay->display();
   #endif
   //delay(oledTIME);
-  //Heltec.display->clear();
+  //oledDisplay->clear();
 }
 
 /// Core 0 Task (LoRa)
@@ -133,53 +189,53 @@ void HasTRX(void *pvParameters) {
   while (true) {
     MyRX_Reset = false;
     // Initialize LoRa
-    LoRa.setSyncWord(0xFF);                 // Set for LoRa Broadcast
-    LoRa.disableCrc();
-    LoRa.setFrequency(frequency);
-    LoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
+    hvLoRa.setSyncWord(0xFF);                 // Set for LoRa Broadcast
+    hvLoRa.disableCrc();
+    hvLoRa.setFrequency(frequency);
+    hvLoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
     if (modemconfig == "Bw125Cr45Sf128") {
-        LoRa.setSignalBandwidth(125000);
-        LoRa.setSpreadingFactor(7);
-        LoRa.setCodingRate4(8);
+        hvLoRa.setSignalBandwidth(125000);
+        hvLoRa.setSpreadingFactor(7);
+        hvLoRa.setCodingRate4(8);
       }
       else if (modemconfig == "Bw500Cr45Sf128") {
-        LoRa.setSignalBandwidth(500000);
-        LoRa.setSpreadingFactor(7);
-        LoRa.setCodingRate4(5);
+        hvLoRa.setSignalBandwidth(500000);
+        hvLoRa.setSpreadingFactor(7);
+        hvLoRa.setCodingRate4(5);
       }
       else if (modemconfig == "Bw31_25Cr48Sf512") {
-        LoRa.setSignalBandwidth(31250);
-        LoRa.setSpreadingFactor(7);
-        LoRa.setCodingRate4(8);
+        hvLoRa.setSignalBandwidth(31250);
+        hvLoRa.setSpreadingFactor(7);
+        hvLoRa.setCodingRate4(8);
       }
       else if (modemconfig ==  "Bw125Cr48Sf4096") {
-        LoRa.setSignalBandwidth(125000);
-        LoRa.setSpreadingFactor(12);
-        LoRa.setCodingRate4(8);
+        hvLoRa.setSignalBandwidth(125000);
+        hvLoRa.setSpreadingFactor(12);
+        hvLoRa.setCodingRate4(8);
       }
       else if (modemconfig ==  "Bw125Cr45Sf2048") {
-        LoRa.setSignalBandwidth(125000);
-        LoRa.setSpreadingFactor(8);
-        LoRa.setCodingRate4(5);
+        hvLoRa.setSignalBandwidth(125000);
+        hvLoRa.setSpreadingFactor(8);
+        hvLoRa.setCodingRate4(5);
       }
       else {
-        LoRa.setSignalBandwidth(125000);
-        LoRa.setSpreadingFactor(7);
-        LoRa.setCodingRate4(8);
+        hvLoRa.setSignalBandwidth(125000);
+        hvLoRa.setSpreadingFactor(7);
+        hvLoRa.setCodingRate4(8);
     }
-    LoRa.receive();
+    hvLoRa.receive();
     Serial.print("CPU("); 
     Serial.print(xPortGetCoreID());
     Serial.println("): Task (re)start - HasTRX (LoRa)"); 
     while (!MyRX_Reset) {
       delay(5);
       // try to parse packet
-      int packetSize = LoRa.parsePacket();
+      int packetSize = hvLoRa.parsePacket();
       if (packetSize) {
         lastMsgRX = "";
         for (int i = 0; i < packetSize; i++)
-                  lastMsgRX = lastMsgRX + ((char)LoRa.read());
-        lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(LoRa.packetRssi());
+                  lastMsgRX = lastMsgRX + ((char)hvLoRa.read());
+        lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(hvLoRa.packetRssi());
         Serial.println(lastMsgRX);
         webSocket.broadcastTXT(lastMsgRX);
       }
@@ -190,12 +246,12 @@ void HasTRX(void *pvParameters) {
 /// TX LoRa
 void sendLORA(String outgoing)
 {
-  LoRa.beginPacket();                     // start packet
-  LoRa.write(destinationLORA);            // add destination address
-  //LoRa.write(localaddressLORA);         // add sender address
-  //LoRa.write(outgoing.length());        // add payload length
-  LoRa.print(outgoing);                   // add payload
-  LoRa.endPacket();                       // finish packet and send it
+  hvLoRa.beginPacket();                     // start packet
+  hvLoRa.write(destinationLORA);            // add destination address
+  //hvLoRa.write(localaddressLORA);         // add sender address
+  //hvLoRa.write(outgoing.length());        // add payload length
+  hvLoRa.print(outgoing);                   // add payload
+  hvLoRa.endPacket();                       // finish packet and send it
   #ifdef HAS_OLED
   OLEDme(outgoing);
   #endif
@@ -212,9 +268,9 @@ void onReceiveLORA(int packetSize)
   lastMsgRX = "";
   for (int i = 0; i < packetSize; i++)
   {
-    lastMsgRX = lastMsgRX + ((char)LoRa.read());
+    lastMsgRX = lastMsgRX + ((char)hvLoRa.read());
   }
-  lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(LoRa.packetRssi());
+  lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(hvLoRa.packetRssi());
   Serial.print("RX:");
   Serial.println(lastMsgRX);
   #ifdef HAS_OLED
@@ -234,12 +290,12 @@ void HasBeacon(void *pvParameters) {
 /// Display Logo on OLED
 void logo()
 {
-  #ifdef HELTEC_WIFI_LORA_32_V2
-  Heltec.display->clear();
-  Heltec.display->drawXbm(0,5,hvdnimg_width,hvdnimg_height,hvdnimg_bits);
-  Heltec.display->display();
+  #ifdef HAS_OLED
+  oledDisplay->clear();
+  oledDisplay->drawXbm(0,5,hvdnimg_width,hvdnimg_height,hvdnimg_bits);
+  oledDisplay->display();
   delay(1500);
-  Heltec.display->clear();
+  oledDisplay->clear();
   #endif
 }
 
@@ -283,7 +339,7 @@ void onWebSocketEvent(uint8_t clientID, WStype_t type, uint8_t * payload, size_t
       // DUMP LORA
       if (payloadS == "GET:LORA") {
         // dump lora config
-        LoRa.dumpRegisters(Serial);
+        hvLoRa.dumpRegisters(Serial);
         webSocket.sendTXT(clientID, "ACK:GET:LORA");
       }
       
@@ -446,20 +502,60 @@ void initWebSockets() {
 }
 
 void initOLED() {
-  // Start OLED 
-  #ifdef HELTEC_WIFI_LORA_32_V2
-  Heltec.display->init();
-  Heltec.display->flipScreenVertically();  
-  Heltec.display->setFont(ArialMT_Plain_10); Serial.println(" 600: OLED Initialized");
-   #endif
+  // Start OLED
+  #ifdef HAS_OLED
+  #ifdef HASV_HELTEC_BOARD
+  oledDisplay->init();
+  #else
+  Wire.begin(OLED_SDA, OLED_SCL);
+  oledDisplay->init();
+  #endif
+  oledDisplay->flipScreenVertically();
+  oledDisplay->setFont(ArialMT_Plain_10);
+  Serial.println(" 600: OLED Initialized");
+  #endif
 }
+
+#ifdef HAS_AXP192
+void initPMU() {
+  // T-Beam (and similar boards): the LoRa radio and GPS run off 3.3V rails
+  // gated by the AXP192 PMU. Nothing downstream of this will respond until
+  // it is powered on.
+  Wire.begin();
+  if (!PMU.begin(Wire, AXP192_SLAVE_ADDRESS)) {
+    PMU.setPowerOutPut(AXP192_LDO2, AXP202_ON);   // LoRa radio VDD
+    PMU.setPowerOutPut(AXP192_LDO3, AXP202_ON);   // GPS VDD
+    PMU.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
+    PMU.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
+    PMU.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+    Serial.println(" 050: AXP192 PMU initialized");
+  } else {
+    Serial.println(" ERR: AXP192 PMU init failed - LoRa/GPS may be unpowered");
+  }
+}
+#endif
+
+#ifndef HASV_HELTEC_BOARD
+void initLoRaRadio() {
+  // Heltec boards get this for free from Heltec.begin(); everyone else
+  // wires the SX127x up by hand from the board's variant pin definitions.
+  SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+  hvLoRa.setPins(LORA_CS, LORA_RST, LORA_IRQ);
+  if (!hvLoRa.begin(BAND)) {
+    Serial.println(" ERR: LoRa radio init failed");
+  }
+}
+#endif
 
 //
 // SETUP
 //
 
 void setup() {
-  #ifdef HELTEC_WIFI_LORA_32_V2 
+  #ifdef HAS_AXP192
+  initPMU();
+  #endif
+  #ifdef HASV_HELTEC_BOARD
   Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
   #endif
   initSerial();
@@ -472,6 +568,9 @@ void setup() {
   initWiFi();
   initWebServer();
   initWebSockets();
+  #ifndef HASV_HELTEC_BOARD
+  initLoRaRadio();
+  #endif
   #ifdef HAS_OLED
   initOLED();
   logo();
