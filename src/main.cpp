@@ -15,7 +15,7 @@
 #if !defined(WIFI_LORA_32) && !defined(WIFI_LORA_32_V2) && !defined(WIFI_LORA_32_V3) \
  && !defined(WIRELESS_STICK) && !defined(WIRELESS_STICK_LITE) \
  && !defined(TTGO_LORA32_V1) && !defined(TTGO_LORA32_V2) && !defined(TTGO_LORA32_V21) && !defined(TTGO_TBEAM) \
- && !defined(LILYGO_T3_S3)
+ && !defined(LILYGO_T3_S3) && !defined(BQ_STATION_G2)
 #error "No board selected. Build using one of the environments in platformio.ini (e.g. pio run -e heltec_wifi_lora_32_V2)."
 #endif
 
@@ -36,8 +36,17 @@
 // (see below) that speaks the exact same method names the SX127x path uses,
 // so HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent don't need to know or
 // care which radio chip is actually on the other end of "hvLoRa".
-#if defined(LILYGO_T3_S3)
+#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2)
 #define HASV_SX126X_BOARD
+#endif
+
+// True for boards whose OLED is an SH1107 (Adafruit_SH110X) rather than the
+// SSD1306 the rest of this file assumes. Same idea as HASV_SX126X_BOARD:
+// a small adapter (see below) speaks the OLEDme()/logo() calls this file
+// already makes, so nothing downstream needs to know which controller it's
+// actually talking to.
+#if defined(BQ_STATION_G2)
+#define HASV_SH1107_BOARD
 #endif
 
 //
@@ -51,13 +60,18 @@
 #include "heltec.h"
 #else
 #include <SPI.h>
+#include <Wire.h>
 #ifdef HASV_SX126X_BOARD
 #include <RadioLib.h>
 #else
 #include <LoRa.h>
 #endif
 #ifdef HAS_OLED
+#ifdef HASV_SH1107_BOARD
+#include <Adafruit_SH110X.h>
+#else
 #include "SSD1306Wire.h"
+#endif
 #endif
 #ifdef HAS_AXP192
 #include <axp20x.h>
@@ -79,13 +93,56 @@
 #define WIFI_POLL_TRIES 20
 #define BAND 911250000                    // you can set band here directly, ( 868E6,915E6 )
 
+#ifdef HASV_SH1107_BOARD
+// OLEDme()/logo() (below) call oledDisplay->setTextAlignment(TEXT_ALIGN_LEFT)
+// and ->setFont(ArialMT_Plain_10) unconditionally -- those two symbols
+// normally come from the ThingPulse SSD1306Wire library, which this board
+// doesn't use. Since this adapter always left-aligns and only ever has the
+// one built-in font anyway, they're just stand-ins to satisfy the call
+// sites rather than a real SSD1306Wire include pulled in for two constants.
+#define TEXT_ALIGN_LEFT 0
+static const uint8_t ArialMT_Plain_10[] = {0};
+
+// Adapter that makes an Adafruit_SH1107 (e.g. BQ Station G2's 1.3" OLED)
+// answer to the same handful of calls OLEDme()/logo()/initOLED() already
+// make against a ThingPulse SSD1306Wire -- same idea as RadioLibSX126x
+// below, applied to the display instead of the radio.
+class SH1107OLEDAdapter {
+public:
+  SH1107OLEDAdapter(int w, int h, TwoWire *wire, int rstPin)
+    : dev(w, h, wire, rstPin) {}
+
+  void init() { dev.begin(0x3C, true); }
+  void flipScreenVertically() { dev.setRotation(2); }
+  void setFont(const uint8_t *) {}     // only ever asked for one font; ignored
+  void setTextAlignment(int) {}        // only ever asked to left-align; ignored
+  void clear() { dev.clearDisplay(); }
+  void drawString(int x, int y, const String &text) {
+    dev.setCursor(x, y);
+    dev.setTextColor(SH110X_WHITE);
+    dev.print(text);
+  }
+  void display() { dev.display(); }
+  void drawXbm(int x, int y, int w, int h, const uint8_t *bits) {
+    dev.drawXBitmap(x, y, bits, w, h, SH110X_WHITE);
+  }
+
+private:
+  Adafruit_SH1107 dev;
+};
+#endif
+
 // OLED handle. On Heltec boards Heltec.begin() already creates and owns
-// Heltec.display (an SSD1306Wire*); on every other board we create our own
-// SSD1306Wire instance from the board's OLED_SDA/OLED_SCL pins. Everything
-// below the init functions just talks to "oledDisplay" either way.
+// Heltec.display (an SSD1306Wire*); on SH1107 boards we wrap one in the
+// adapter above; everywhere else we create our own SSD1306Wire instance
+// from the board's OLED_SDA/OLED_SCL pins. Everything below the init
+// functions just talks to "oledDisplay" either way.
 #ifdef HAS_OLED
 #ifdef HASV_HELTEC_BOARD
 #define oledDisplay Heltec.display
+#elif defined(HASV_SH1107_BOARD)
+SH1107OLEDAdapter genericSH1107OLED(128, 64, &Wire, -1);
+#define oledDisplay (&genericSH1107OLED)
 #else
 SSD1306Wire genericOLED(0x3c, OLED_SDA, OLED_SCL);
 #define oledDisplay (&genericOLED)
@@ -131,7 +188,12 @@ public:
   void setSyncWord(int sw) { radio.setSyncWord((uint8_t)sw); }
   void disableCrc() { radio.setCRC(0); }
   void setFrequency(long freqHz) { radio.setFrequency(freqHz / 1.0e6); }
-  void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) { radio.setOutputPower(level); }
+  void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) {
+    #ifdef SX126X_MAX_POWER
+    if (level > SX126X_MAX_POWER) level = SX126X_MAX_POWER;
+    #endif
+    radio.setOutputPower(level);
+  }
   void setSignalBandwidth(long bwHz) { radio.setBandwidth(bwHz / 1000.0); }
   void setSpreadingFactor(int sf) { radio.setSpreadingFactor(sf); }
   void setCodingRate4(int denominator) { radio.setCodingRate(denominator); }

@@ -81,17 +81,24 @@ Landed and build-verified. The approach turned out cleaner than originally scope
 - All API calls (`Module` constructor arg order, `begin()`/`setSyncWord()`/`setCRC()`/etc. signatures) were checked against the actual installed RadioLib 7.7.1 headers, not assumed from memory.
 - One toolchain gotcha worth remembering: an `IRAM_ATTR` static method defined *inline inside* the class body trips an Xtensa "literal placed after use" linker error — has to be declared in-class and defined out-of-line instead.
 
-### Remaining three: bigger than "swap the radio," each in its own way
+### Done: B&Q Station G2 (`env:bq_station_g2`)
 
-Pulled real pin/config data from `meshtastic/firmware` for all three before writing anything, and each turned out to need more than RadioLib alone:
+Also landed and build-verified. Radio side reused the T3-S3 work with zero new code — same `RadioLibSX126x` adapter, just different `-D` pins (SCK=12, MISO=14, MOSI=13, CS=11, RESET=21, DIO1=48, BUSY=47), sourced from Meshtastic's shared `variants/esp32s3/station-common/station_common.h` (Station G2 and G3 build on the same file). Also added a max-power clamp (`SX126X_MAX_POWER`) inside the adapter's `setTxPower()`, since G2's real hardware tops out at 19 dBm — a `#ifdef`, no-op on boards that don't define it.
+
+The OLED did need new code: G2's 1.3" display is an **SH1107** (Adafruit_SH110X), not the SSD1306 every other board here uses. Added a `SH1107OLEDAdapter` — same pattern as the radio adapter, applied to the display: it implements the handful of calls `OLEDme()`/`logo()`/`initOLED()` actually make (`init`, `flipScreenVertically`, `clear`, `drawString`, `display`, `drawXbm`) on top of `Adafruit_SH110X`, so those shared functions didn't need touching either. `setFont`/`setTextAlignment` are no-ops on this adapter since the code only ever asks for one font and left-alignment; two small stand-in constants (`TEXT_ALIGN_LEFT`, `ArialMT_Plain_10`) replace the ones that normally come from the SSD1306 library this board doesn't link.
+
+No dedicated PlatformIO board id exists for Station G2, so it builds on the generic `esp32-s3-devkitc-1` profile rather than borrowing another vendor's board identity.
+
+### Remaining two: bigger than "swap the radio," each in its own way
+
+Pulled real pin/config data from `meshtastic/firmware` for both before writing anything:
 
 - **T-Beam Supreme (`tbeam-s3-core`)** — uses an **AXP2101** PMU, not the AXP192 the existing T-Beam v1.1 support uses. That's a different chip and a different library (`lewisxhe/XPowersLib`, not `AXP202X_Library`), plus a PCF8563 RTC sharing a second I2C bus (`Wire1`). SX1262 pins themselves (CS=10, DIO1=1, BUSY=4, RESET=5) are simple enough.
-- **Station G2** — its `variant.h` is just `#include "station_common.h"`; the real pin definitions live in that shared header, not yet pulled.
-- **Heltec Wireless Tracker** — has **no OLED**; its display is an ST7735S TFT over a dedicated SPI bus, which `oledDisplay`/`SSD1306Wire` can't drive. Also has GPS and a Vext power-rail enable pin similar in spirit to T-Beam's PMU gating.
+- **Heltec Wireless Tracker** — has **no OLED**; its display is an ST7735S TFT over a dedicated SPI bus, a genuinely different display API (Adafruit_GFX-over-SPI, not I2C) from either OLED adapter above. Also has GPS and a Vext power-rail enable pin similar in spirit to T-Beam's PMU gating.
 
-None of these are just "add a `RadioLibSX126x` instance with different pins" the way T3-S3 was — each needs its own small chunk of new code (a PMU driver swap, sourcing a shared header, or a TFT display path) before the radio part even comes into play.
+Neither is just "add a `RadioLibSX126x` instance with different pins" the way T3-S3 and Station G2 were — each needs its own small chunk of new code (a PMU driver swap, or a TFT display path) before the radio part even comes into play.
 
-**Effort signal going forward:** T3-S3 was closer to the original "config + pin map" boards than expected, thanks to the adapter design. The other three are each their own small feature, not a repeat of T3-S3 — and like the SX127x boards, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior) without the actual hardware in hand.
+**Effort signal going forward:** T3-S3 and Station G2 both turned out to be config-and-adapter-reuse exercises once the `hvLoRa`/`oledDisplay` seams existed. The remaining two are each their own small feature, not a repeat of these two — and like every board here, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior) without the actual hardware in hand.
 
 ## Known issues / gaps (from code + README, not fixed by anyone yet)
 
