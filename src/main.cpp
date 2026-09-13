@@ -36,8 +36,25 @@
 // (see below) that speaks the exact same method names the SX127x path uses,
 // so HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent don't need to know or
 // care which radio chip is actually on the other end of "hvLoRa".
-#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2) || defined(TBEAM_SUPREME) || defined(HELTEC_WIRELESS_TRACKER)
+//
+// WIFI_LORA_32_V3 belongs here despite also being HASV_HELTEC_BOARD above:
+// its actual chip is an SX1262, not the SX1276 Heltec's own bundled LoRa
+// library was written for. Confirmed on real hardware -- asking Heltec's
+// library to init V3's radio doesn't just fail, it hangs the CPU forever
+// (an unconditional while(1) in their own heltec.cpp when LoRa.begin() can't
+// detect a chip it recognizes). V3 uses Heltec.begin()/Heltec.display for
+// display+Vext+serial only (see HASV_HELTEC_RADIO_BOARD below); the radio
+// goes through this same RadioLibSX126x adapter as the other four boards.
+#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2) || defined(TBEAM_SUPREME) || defined(HELTEC_WIRELESS_TRACKER) || defined(WIFI_LORA_32_V3)
 #define HASV_SX126X_BOARD
+#endif
+
+// True for Heltec boards whose real chip Heltec's own bundled LoRa library
+// actually matches (SX1276) -- i.e. HASV_HELTEC_BOARD minus WIFI_LORA_32_V3.
+// hvLoRa/initLoRaRadio() below key off this, not HASV_HELTEC_BOARD, so V3
+// falls through to the RadioLibSX126x path like any other HASV_SX126X_BOARD.
+#if defined(WIFI_LORA_32) || defined(WIFI_LORA_32_V2) || defined(WIRELESS_STICK) || defined(WIRELESS_STICK_LITE)
+#define HASV_HELTEC_RADIO_BOARD
 #endif
 
 // True for boards whose OLED is an Adafruit_SH110X-family controller
@@ -70,6 +87,10 @@
 #include "TimeLib.h"
 #include "HASviolet_config.h"
 #ifdef HASV_HELTEC_BOARD
+// See platformio.ini's Class_Wifi_LoRa build_flag comment for why this
+// project has to define that macro itself -- a #define here in main.cpp
+// would only affect this translation unit, not heltec.cpp's own separate
+// compilation, so it has to be a compiler flag instead.
 #include "heltec.h"
 #else
 #include <SPI.h>
@@ -95,6 +116,11 @@
 #include <XPowersLib.h>
 #endif
 #endif
+#if defined(HASV_HELTEC_BOARD) && defined(HASV_SX126X_BOARD)
+// WIFI_LORA_32_V3 only: needs RadioLib for its actual SX1262 radio on top of
+// heltec.h for display/Vext/serial -- see HASV_SX126X_BOARD's comment above.
+#include <RadioLib.h>
+#endif
 #include "WiFi.h"
 #include "ESPAsyncWebServer.h"
 #include <WebSocketsServer.h>
@@ -102,6 +128,11 @@
 #include "ArduinoJson.h"
 #include "FS.h"
 #include "HVDN_logo.h"
+#ifdef MESHTASTIC_PHY_TEST
+// Phase 1 bring-up only -- see project_state.md's Meshtastic interop roadmap.
+// Classic-mode builds never define MESHTASTIC_PHY_TEST, so never see this.
+#include "Meshtastic_RadioConfig.h"
+#endif
 
 
 //
@@ -279,6 +310,12 @@ public:
 
   void setSyncWord(int sw) { radio.setSyncWord((uint8_t)sw); }
   void disableCrc() { radio.setCRC(0); }
+  // 2 = the "on" length RadioLib's own SX126x::begin() defaults to; matches
+  // what disableCrc()'s setCRC(0) is already assumed to be turning off.
+  void enableCrc() { radio.setCRC(2); }
+  // Hardcoded to 8 inside begin() below; this lets callers change it
+  // afterward (Meshtastic wants 16, not the classic-mode default).
+  void setPreambleLength(long length) { radio.setPreambleLength((size_t)length); }
   void setFrequency(long freqHz) { radio.setFrequency(freqHz / 1.0e6); }
   void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) {
     #ifdef SX126X_MAX_POWER
@@ -334,8 +371,10 @@ RadioLibSX126x sx126xRadio(LORA_CS, SX126X_DIO1, LORA_RST, SX126X_BUSY);
 // confusingly, expose under the same name) provide -- so on Heltec boards
 // the bare "LoRa" symbol in scope here is a *different*, never-initialized
 // object. hvLoRa always points at whichever one Heltec.begin()/initLoRaRadio()
-// actually set up.
-#ifdef HASV_HELTEC_BOARD
+// actually set up. Keyed on HASV_HELTEC_RADIO_BOARD, not HASV_HELTEC_BOARD --
+// WIFI_LORA_32_V3 is the latter (display/Vext/serial via Heltec.begin()) but
+// not the former (its radio is an SX1262, see HASV_SX126X_BOARD's comment).
+#ifdef HASV_HELTEC_RADIO_BOARD
 #define hvLoRa Heltec.LoRa
 #elif defined(HASV_SX126X_BOARD)
 #define hvLoRa sx126xRadio
@@ -438,10 +477,30 @@ void HasTRX(void *pvParameters) {
   while (true) {
     MyRX_Reset = false;
     // Initialize LoRa
+    hvLoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
+    #ifdef MESHTASTIC_PHY_TEST
+    // Phase 1 bring-up: EU_433 + LongFast, computed via the same lookup/formula
+    // Phase 2+ will reuse -- see Meshtastic_RadioConfig.h and project_state.md's
+    // hand-derived cross-check (433.875MHz). Ignores the classic-mode
+    // modemconfig/frequency JSON settings entirely.
+    {
+      const MeshtasticRegion &meshRegion = meshtasticFindRegion("EU_433");
+      const MeshtasticPreset &meshPreset = meshtasticFindPreset("LongFast");
+      float meshFreqMHz = meshtasticFrequency(meshRegion, meshPreset.bwKHz, meshPreset.name);
+      hvLoRa.setSyncWord(0x2B);
+      hvLoRa.enableCrc();
+      hvLoRa.setPreambleLength(16);
+      hvLoRa.setFrequency((long)(meshFreqMHz * 1.0e6));
+      hvLoRa.setSignalBandwidth((long)(meshPreset.bwKHz * 1000));
+      hvLoRa.setSpreadingFactor(meshPreset.sf);
+      hvLoRa.setCodingRate4(meshPreset.cr);
+      Serial.print("MESH: PHY test freq (MHz): ");
+      Serial.println(meshFreqMHz, 6);
+    }
+    #else
     hvLoRa.setSyncWord(0xFF);                 // Set for LoRa Broadcast
     hvLoRa.disableCrc();
     hvLoRa.setFrequency(frequency);
-    hvLoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
     if (modemconfig == "Bw125Cr45Sf128") {
         hvLoRa.setSignalBandwidth(125000);
         hvLoRa.setSpreadingFactor(7);
@@ -472,6 +531,7 @@ void HasTRX(void *pvParameters) {
         hvLoRa.setSpreadingFactor(7);
         hvLoRa.setCodingRate4(8);
     }
+    #endif
     hvLoRa.receive();
     Serial.print("CPU("); 
     Serial.print(xPortGetCoreID());
@@ -713,12 +773,23 @@ void initWiFi() {
   #ifdef WIFI_SSID
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_KEY);
-  while(WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+  // Pre-existing bug, unrelated to mesh work: this loop had no bound at all --
+  // WIFI_POLL_DELAY/WIFI_POLL_TRIES were already defined up top for exactly
+  // this but never actually used, so if WIFI_SSID's network isn't reachable
+  // the board hangs here forever and never reaches the AP fallback below (or
+  // logo()/HasTRX() afterward). Confirmed on real hardware: a HiLetgo V3
+  // sitting blank since first boot with HASviolet_config.h's placeholder
+  // WIFI_SSID ("HomeWAN") not present at the test bench.
+  int wifiTries = 0;
+  while (WiFi.status() != WL_CONNECTED && wifiTries < WIFI_POLL_TRIES) {
+    delay(WIFI_POLL_DELAY);
+    wifiTries++;
   }
-  Serial.println(" 300: WiFi CL initialized");
-  //Serial.println("310: WiFi IP  " + WiFi.localIP());
-  //Serial.println("320: WiFi CL initialized");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(" 300: WiFi CL initialized");
+    //Serial.println("310: WiFi IP  " + WiFi.localIP());
+    //Serial.println("320: WiFi CL initialized");
+  }
   #endif
 
   if (WiFi.status() != WL_CONNECTED) 
@@ -815,10 +886,12 @@ void initPMU() {
 }
 #endif
 
-#ifndef HASV_HELTEC_BOARD
+#ifndef HASV_HELTEC_RADIO_BOARD
 void initLoRaRadio() {
-  // Heltec boards get this for free from Heltec.begin(); everyone else
-  // wires the SX127x up by hand from the board's variant pin definitions.
+  // HASV_HELTEC_RADIO_BOARD boards get this for free from Heltec.begin();
+  // everyone else -- including WIFI_LORA_32_V3, whose radio Heltec.begin()
+  // deliberately skips (see setup() below) -- wires the radio up by hand
+  // from the board's variant pin definitions.
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
   hvLoRa.setPins(LORA_CS, LORA_RST, LORA_IRQ);
   if (!hvLoRa.begin(BAND)) {
@@ -836,7 +909,16 @@ void setup() {
   initPMU();
   #endif
   #ifdef HASV_HELTEC_BOARD
-  Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
+  #ifdef HASV_HELTEC_RADIO_BOARD
+  Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Enable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
+  #else
+  // WIFI_LORA_32_V3: LoRaEnable=false. Heltec's own bundled LoRa init only
+  // knows SX1276 and permanently hangs the CPU (an unconditional while(1) in
+  // their own heltec.cpp) if asked to init V3's actual SX1262 chip --
+  // confirmed on real hardware. Display/Vext/serial still come from
+  // Heltec.begin(); the radio comes from initLoRaRadio() below instead.
+  Heltec.begin(true /*DisplayEnable Enable*/, false /*LoRa Enable -- see comment*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
+  #endif
   #endif
   initSerial();
   Serial.println("INIT: HASviolet ESP32");
@@ -848,7 +930,7 @@ void setup() {
   initWiFi();
   initWebServer();
   initWebSockets();
-  #ifndef HASV_HELTEC_BOARD
+  #ifndef HASV_HELTEC_RADIO_BOARD
   initLoRaRadio();
   #endif
   #ifdef HAS_OLED
