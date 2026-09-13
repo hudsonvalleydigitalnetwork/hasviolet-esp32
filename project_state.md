@@ -67,9 +67,9 @@ All of these use an SX1276/SX1277-class radio. Board selection is entirely via `
 
 Deliberately **not** added: **RAK11200** (WisBlock module — pin map depends on which base-board slot the LoRa module sits in; needs sourcing RAK's own schematics before trusting it) and a Heltec "V2.1" (doesn't exist as distinct hardware from V2 — that naming belongs to TTGO's V2.1, not Heltec's).
 
-## SX126x radio support (RadioLib) — in progress on `Radiolib` branch
+## SX126x radio support (RadioLib) — complete on `Radiolib` branch
 
-Meshtastic's own hardware docs and current buying guides converge on a set of "community favorite" ESP32-S3 boards this project didn't cover, because they all use the **SX1262/SX1268** radio rather than SX1276/SX1277: LILYGO T3-S3, T-Beam Supreme (T-Beam S3-Core), B&Q Station G2, Heltec Wireless Tracker. (T-Deck/T-Deck Plus fit this radio family too but are intentionally excluded — their keyboard/screen add nothing to HASviolet's browser-driven UI model.)
+Meshtastic's own hardware docs and current buying guides converge on a set of "community favorite" ESP32-S3 boards this project didn't cover, because they all use the **SX1262/SX1268** radio rather than SX1276/SX1277: LILYGO T3-S3, T-Beam Supreme (T-Beam S3-Core), B&Q Station G2, Heltec Wireless Tracker. (T-Deck/T-Deck Plus fit this radio family too but are intentionally excluded — their keyboard/screen add nothing to HASviolet's browser-driven UI model.) All four are now supported.
 
 ### Done: LILYGO T3-S3 (`env:lilygo_t3_s3`)
 
@@ -89,16 +89,21 @@ The OLED did need new code: G2's 1.3" display is an **SH1107** (Adafruit_SH110X)
 
 No dedicated PlatformIO board id exists for Station G2, so it builds on the generic `esp32-s3-devkitc-1` profile rather than borrowing another vendor's board identity.
 
-### Remaining two: bigger than "swap the radio," each in its own way
+### Done: T-Beam Supreme / T-Beam S3-Core (`env:tbeam_supreme`)
 
-Pulled real pin/config data from `meshtastic/firmware` for both before writing anything:
+Radio side reused `RadioLibSX126x` again with just new pins (SCK=12, MISO=13, MOSI=11, CS=10, RESET=5, DIO1=1, BUSY=4) and OLED reused the SH110X adapter template with `Adafruit_SH1106G` (this board's display is SH1106, not SH1107).
 
-- **T-Beam Supreme (`tbeam-s3-core`)** — uses an **AXP2101** PMU, not the AXP192 the existing T-Beam v1.1 support uses. That's a different chip and a different library (`lewisxhe/XPowersLib`, not `AXP202X_Library`), plus a PCF8563 RTC sharing a second I2C bus (`Wire1`). SX1262 pins themselves (CS=10, DIO1=1, BUSY=4, RESET=5) are simple enough.
-- **Heltec Wireless Tracker** — has **no OLED**; its display is an ST7735S TFT over a dedicated SPI bus, a genuinely different display API (Adafruit_GFX-over-SPI, not I2C) from either OLED adapter above. Also has GPS and a Vext power-rail enable pin similar in spirit to T-Beam's PMU gating.
+The real addition was the PMU: this board uses an **AXP2101**, a different chip from the AXP192 the original T-Beam v1.1 uses, needing a different library (`lewisxhe/XPowersLib`) and its own `initPMU()`. One non-obvious wrinkle: XPowersLib's concrete `XPowersAXP2101` class keeps `setPowerChannelVoltage()`/`enablePowerOutput()` **protected** — they're only public on its `XPowersLibInterface` base, so `PMU` has to be declared as that interface type (a pointer), matching exactly how Meshtastic's own `src/Power.cpp` uses this library. Rail assignments (ALDO1 for sensors/OLED/RTC, ALDO2 as a required baseline rail, ALDO3 for the LoRa radio) and the fact that the PMU lives on the ESP32's second I2C bus (`Wire1`, shared with an onboard PCF8563 RTC) both came straight from Meshtastic's own `LILYGO_TBEAM_S3_CORE` branch in `Power.cpp` — GNSS, the M.2 slot, and the SD card rails were left off since nothing here uses them.
 
-Neither is just "add a `RadioLibSX126x` instance with different pins" the way T3-S3 and Station G2 were — each needs its own small chunk of new code (a PMU driver swap, or a TFT display path) before the radio part even comes into play.
+### Done: Heltec Wireless Tracker (`env:heltec_wireless_tracker`)
 
-**Effort signal going forward:** T3-S3 and Station G2 both turned out to be config-and-adapter-reuse exercises once the `hvLoRa`/`oledDisplay` seams existed. The remaining two are each their own small feature, not a repeat of these two — and like every board here, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior) without the actual hardware in hand.
+Radio side, again, is just `RadioLibSX126x` with new pins (SCK=9, MISO=11, MOSI=10, CS=8, RESET=12, DIO1=14, BUSY=13).
+
+This board has **no OLED at all** — its display is a color **ST7735 TFT** on its own dedicated SPI bus, separate from the LoRa radio's. Added an `ST7735TFTAdapter` following the same pattern as the OLED adapters (`Adafruit ST7735 and ST7789 Library`), with one real difference: an ST7735 draws each primitive straight to the panel rather than buffering in RAM, so its `display()` is a no-op. Also needs a `VEXT_ENABLE` GPIO driven high before the panel (and GPS, unused here) will power on — a much simpler version of the PMU-gating T-Beam boards need, handled inline in the adapter's `init()`.
+
+**Caveat worth flagging:** the panel geometry (`INITR_MINI160x80`, landscape rotation) is inferred from Meshtastic's own `TFT_WIDTH`/`HEIGHT`/`OFFSET_X` defines for this exact board, not confirmed against real hardware — if the image comes up offset or mirrored, that init call is the first place to look.
+
+**Effort signal, in retrospect:** three of the four boards (T3-S3, Station G2, T-Beam Supreme) turned into config-and-adapter-reuse exercises once the `hvLoRa`/`oledDisplay` seams existed — even the "different chip" pieces (SH1106 vs SH1107, AXP2101 vs AXP192) were a few dozen lines each, not new architecture. Wireless Tracker's TFT was the only genuinely new *kind* of adapter. As with every board in this repo, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior, TFT geometry) without the actual hardware in hand — everything here is build-verified, not hardware-verified.
 
 ## Known issues / gaps (from code + README, not fixed by anyone yet)
 
