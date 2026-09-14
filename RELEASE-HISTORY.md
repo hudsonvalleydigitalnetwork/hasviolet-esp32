@@ -2,7 +2,7 @@
 
 ## Pre-Release v0.6 — 2026-09-13
 
-Work done on the `Radiolib` branch (pushed, not yet merged to `main`), continuing from v0.5.
+`Radiolib` work
 
 ### Added
 - SX126x radio support via [RadioLib](https://github.com/jgromes/RadioLib), bringing the total to **13 supported boards**: LILYGO T3-S3, B&Q Station G2, LILYGO T-Beam Supreme (T-Beam S3-Core), and Heltec Wireless Tracker — the four Meshtastic community-favorite ESP32-S3 boards scoped as a follow-up in v0.5.
