@@ -20,23 +20,26 @@
 #endif
 
 // True for any Heltec board (WiFi LoRa 32 V1/V2/V3, Wireless Stick, Wireless
-// Stick Lite) -- these are driven by the Heltec library (Heltec.begin()/
-// Heltec.display/Heltec.LoRa) instead of talking to the radio and OLED
-// directly. These macro names are the Heltec library's OWN board-select
-// macros (see heltec.h) -- they have to be set exactly as it expects, not
-// renamed to our own convention.
+// Stick Lite) -- these use the Heltec library (Heltec.begin()/
+// Heltec.display) for display/Vext/serial bring-up only now. These macro
+// names are the Heltec library's OWN board-select macros (see heltec.h) --
+// they have to be set exactly as it expects, not renamed to our own
+// convention.
 #if defined(WIFI_LORA_32) || defined(WIFI_LORA_32_V2) || defined(WIFI_LORA_32_V3) \
  || defined(WIRELESS_STICK) || defined(WIRELESS_STICK_LITE)
 #define HASV_HELTEC_BOARD
 #endif
 
-// True for any board whose LoRa radio is an SX1262/SX1268 (RadioLib) instead
-// of an SX1276/SX1277 (sandeepmistry/LoRa, or the Heltec library's bundled
-// fork of it). Radio init/TX/RX go through a RadioLibSX126x adapter object
-// (see below) that speaks the exact same method names the SX127x path uses,
-// so HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent don't need to know or
-// care which radio chip is actually on the other end of "hvLoRa".
-#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2) || defined(TBEAM_SUPREME) || defined(HELTEC_WIRELESS_TRACKER)
+// Chip family -- the ONLY axis that decides which lib/HasRadio subclass
+// drives this board's radio (see hvRadio below). Every board's radio object
+// is a HasRadio subclass talking to RadioLib directly, regardless of
+// whether it's also a Heltec board for display purposes: WIFI_LORA_32_V3
+// belongs here despite being HASV_HELTEC_BOARD above, because its actual
+// chip is an SX1262, not the SX1276 every other Heltec board here has.
+// Confirmed on real hardware -- Heltec's own bundled LoRa driver hangs the
+// CPU forever (an unconditional while(1) in heltec.cpp) trying to detect a
+// chip it doesn't recognize on V3.
+#if defined(LILYGO_T3_S3) || defined(BQ_STATION_G2) || defined(TBEAM_SUPREME) || defined(HELTEC_WIRELESS_TRACKER) || defined(WIFI_LORA_32_V3)
 #define HASV_SX126X_BOARD
 #endif
 
@@ -69,22 +72,26 @@
 #include "Arduino.h"
 #include "TimeLib.h"
 #include "HASviolet_config.h"
+// Heltec boards use heltec.h for display/Vext/serial bring-up only now --
+// the radio is always a lib/HasRadio subclass talking to RadioLib directly
+// (see HASV_SX126X_BOARD above and hvRadio below), on every board.
 #ifdef HASV_HELTEC_BOARD
 #include "heltec.h"
-#else
+#endif
 #include <SPI.h>
 #include <Wire.h>
-#ifdef HASV_SX126X_BOARD
 #include <RadioLib.h>
+#ifdef HASV_SX126X_BOARD
+#include <HasRadioSX126x.h>
 #else
-#include <LoRa.h>
+#include <HasRadioSX127x.h>
 #endif
 #ifdef HAS_OLED
 #ifdef HASV_SH110X_BOARD
 #include <Adafruit_SH110X.h>
 #elif defined(HASV_ST7735_BOARD)
 #include <Adafruit_ST7735.h>
-#else
+#elif !defined(HASV_HELTEC_BOARD)
 #include "SSD1306Wire.h"
 #endif
 #endif
@@ -93,7 +100,6 @@
 #endif
 #ifdef HAS_AXP2101
 #include <XPowersLib.h>
-#endif
 #endif
 #include "WiFi.h"
 #include "ESPAsyncWebServer.h"
@@ -126,8 +132,8 @@ static const uint8_t ArialMT_Plain_10[] = {0};
 // Adapter that makes an Adafruit_SH110X-family display (SH1107 on BQ
 // Station G2, SH1106 on T-Beam Supreme) answer to the same handful of
 // calls OLEDme()/logo()/initOLED() already make against a ThingPulse
-// SSD1306Wire -- same idea as RadioLibSX126x below, applied to the display
-// instead of the radio. Templated on the concrete Adafruit_SH110X subclass
+// SSD1306Wire -- same idea as lib/HasRadio's HasRadio subclasses, applied to
+// the display instead of the radio. Templated on the concrete Adafruit_SH110X subclass
 // since Adafruit_SH1107/Adafruit_SH1106G share an identical constructor and
 // drawing API.
 template <typename SH110xDisplay>
@@ -248,100 +254,20 @@ XPowersLibInterface *PMU = new XPowersAXP2101(Wire);
 #endif
 #endif
 
+// Radio handle. Every board's radio -- SX1276/77 or SX1262/68 alike -- is
+// one of lib/HasRadio's two HasRadio subclasses now, talking to RadioLib
+// directly; HasTRX/sendLORA/onWebSocketEvent all go through the shared
+// HasRadio interface via "hvRadio" rather than through a per-chip adapter
+// shaped like the old Arduino LoRaClass API. This used to be a Heltec-vs-
+// generic distinction too (Heltec boards used Heltec.LoRa); now it's purely
+// the HASV_SX126X_BOARD chip-family axis -- Heltec boards' radios go through
+// HasRadioSX127x (or HasRadioSX126x for V3) exactly like every other board.
 #ifdef HASV_SX126X_BOARD
-// Adapter that makes a RadioLib SX1262 look like the old sandeepmistry
-// LoRaClass API (setSyncWord/disableCrc/.../beginPacket/write/endPacket)
-// that HasTRX/sendLORA/onReceiveLORA/onWebSocketEvent already call through
-// "hvLoRa" -- so none of that shared code needs to know or care that the
-// radio underneath is a completely different chip talking a completely
-// different SPI protocol. Frequency/bandwidth arrive from the rest of the
-// app in Hz (this project's convention); RadioLib wants MHz/kHz, so the
-// conversion happens at the boundary here, once.
-class RadioLibSX126x {
-public:
-  RadioLibSX126x(int cs, int dio1, int rst, int busy)
-    : radio(new Module(cs, dio1, rst, busy)) {}
-
-  bool begin(long frequencyHz) {
-    int state = radio.begin(frequencyHz / 1.0e6, 125.0, 7, 5,
-                             RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 17, 8,
-                             SX126X_TCXO_VOLTAGE);
-    if (state != RADIOLIB_ERR_NONE) return false;
-    #ifdef SX126X_DIO2_AS_RF_SWITCH
-    radio.setDio2AsRfSwitch(true);
-    #endif
-    radio.setDio1Action(onDio1Rise);
-    return true;
-  }
-
-  // Pins are already bound in the constructor via Module; nothing to do.
-  void setPins(int, int, int) {}
-
-  void setSyncWord(int sw) { radio.setSyncWord((uint8_t)sw); }
-  void disableCrc() { radio.setCRC(0); }
-  void setFrequency(long freqHz) { radio.setFrequency(freqHz / 1.0e6); }
-  void setTxPower(int level, int /*outputPin, no equivalent on SX126x*/) {
-    #ifdef SX126X_MAX_POWER
-    if (level > SX126X_MAX_POWER) level = SX126X_MAX_POWER;
-    #endif
-    radio.setOutputPower(level);
-  }
-  void setSignalBandwidth(long bwHz) { radio.setBandwidth(bwHz / 1000.0); }
-  void setSpreadingFactor(int sf) { radio.setSpreadingFactor(sf); }
-  void setCodingRate4(int denominator) { radio.setCodingRate(denominator); }
-
-  void receive() { dio1Fired = false; radio.startReceive(); }
-
-  int parsePacket() {
-    if (!dio1Fired) return 0;
-    dio1Fired = false;
-    int state = radio.readData(rxBuf, sizeof(rxBuf) - 1);
-    if (state != RADIOLIB_ERR_NONE) { rxLen = 0; return 0; }
-    rxLen = radio.getPacketLength();
-    rxPos = 0;
-    return rxLen;
-  }
-
-  int read() { return (rxPos < rxLen) ? rxBuf[rxPos++] : -1; }
-  int packetRssi() { return (int)radio.getRSSI(); }
-
-  void beginPacket() { txLen = 0; }
-  size_t write(uint8_t b) { if (txLen < sizeof(txBuf)) txBuf[txLen++] = b; return 1; }
-  size_t print(const String &s) { for (size_t i = 0; i < s.length(); i++) write((uint8_t)s[i]); return s.length(); }
-  void endPacket() { radio.transmit(txBuf, txLen); }
-
-  void dumpRegisters(Stream &out) { out.println("dumpRegisters() is not supported on SX126x/RadioLib"); }
-
-private:
-  SX1262 radio;
-  uint8_t rxBuf[256]; size_t rxLen = 0, rxPos = 0;
-  uint8_t txBuf[256]; size_t txLen = 0;
-  static volatile bool dio1Fired;
-  static void IRAM_ATTR onDio1Rise();
-};
-volatile bool RadioLibSX126x::dio1Fired = false;
-// Defined out-of-line: an IRAM_ATTR function defined inline inside the class
-// body trips the Xtensa toolchain's "literal placed after use" relocation
-// error, since the literal pool ends up on the wrong side of the jump.
-void IRAM_ATTR RadioLibSX126x::onDio1Rise() { dio1Fired = true; }
-
-RadioLibSX126x sx126xRadio(LORA_CS, SX126X_DIO1, LORA_RST, SX126X_BUSY);
-#endif
-
-// LoRa radio handle. The Heltec library owns its own LoRaClass instance as a
-// member (Heltec.LoRa) rather than the bare global "LoRa" object that
-// standalone LoRa libraries (and the Heltec library's own internals,
-// confusingly, expose under the same name) provide -- so on Heltec boards
-// the bare "LoRa" symbol in scope here is a *different*, never-initialized
-// object. hvLoRa always points at whichever one Heltec.begin()/initLoRaRadio()
-// actually set up.
-#ifdef HASV_HELTEC_BOARD
-#define hvLoRa Heltec.LoRa
-#elif defined(HASV_SX126X_BOARD)
-#define hvLoRa sx126xRadio
+HasRadioSX126x hvRadioImpl(LORA_CS, SX126X_DIO1, LORA_RST, SX126X_BUSY);
 #else
-#define hvLoRa LoRa
+HasRadioSX127x hvRadioImpl(LORA_CS, LORA_IRQ, LORA_RST);
 #endif
+HasRadio &hvRadio = hvRadioImpl;
 
 //
 // VARIABLES
@@ -438,53 +364,54 @@ void HasTRX(void *pvParameters) {
   while (true) {
     MyRX_Reset = false;
     // Initialize LoRa
-    hvLoRa.setSyncWord(0xFF);                 // Set for LoRa Broadcast
-    hvLoRa.disableCrc();
-    hvLoRa.setFrequency(frequency);
-    hvLoRa.setTxPower(txpwr,RF_PACONFIG_PASELECT_PABOOST);
+    hvRadio.setSyncWord(0xFF);                 // Set for LoRa Broadcast
+    hvRadio.setCrc(false);
+    hvRadio.setFrequency(frequency);
+    hvRadio.setTxPower(txpwr);
     if (modemconfig == "Bw125Cr45Sf128") {
-        hvLoRa.setSignalBandwidth(125000);
-        hvLoRa.setSpreadingFactor(7);
-        hvLoRa.setCodingRate4(8);
+        hvRadio.setBandwidth(125000);
+        hvRadio.setSpreadingFactor(7);
+        hvRadio.setCodingRate(8);
       }
       else if (modemconfig == "Bw500Cr45Sf128") {
-        hvLoRa.setSignalBandwidth(500000);
-        hvLoRa.setSpreadingFactor(7);
-        hvLoRa.setCodingRate4(5);
+        hvRadio.setBandwidth(500000);
+        hvRadio.setSpreadingFactor(7);
+        hvRadio.setCodingRate(5);
       }
       else if (modemconfig == "Bw31_25Cr48Sf512") {
-        hvLoRa.setSignalBandwidth(31250);
-        hvLoRa.setSpreadingFactor(7);
-        hvLoRa.setCodingRate4(8);
+        hvRadio.setBandwidth(31250);
+        hvRadio.setSpreadingFactor(7);
+        hvRadio.setCodingRate(8);
       }
       else if (modemconfig ==  "Bw125Cr48Sf4096") {
-        hvLoRa.setSignalBandwidth(125000);
-        hvLoRa.setSpreadingFactor(12);
-        hvLoRa.setCodingRate4(8);
+        hvRadio.setBandwidth(125000);
+        hvRadio.setSpreadingFactor(12);
+        hvRadio.setCodingRate(8);
       }
       else if (modemconfig ==  "Bw125Cr45Sf2048") {
-        hvLoRa.setSignalBandwidth(125000);
-        hvLoRa.setSpreadingFactor(8);
-        hvLoRa.setCodingRate4(5);
+        hvRadio.setBandwidth(125000);
+        hvRadio.setSpreadingFactor(8);
+        hvRadio.setCodingRate(5);
       }
       else {
-        hvLoRa.setSignalBandwidth(125000);
-        hvLoRa.setSpreadingFactor(7);
-        hvLoRa.setCodingRate4(8);
+        hvRadio.setBandwidth(125000);
+        hvRadio.setSpreadingFactor(7);
+        hvRadio.setCodingRate(8);
     }
-    hvLoRa.receive();
-    Serial.print("CPU("); 
+    hvRadio.startReceive();
+    Serial.print("CPU(");
     Serial.print(xPortGetCoreID());
-    Serial.println("): Task (re)start - HasTRX (LoRa)"); 
+    Serial.println("): Task (re)start - HasTRX (LoRa)");
     while (!MyRX_Reset) {
       delay(5);
-      // try to parse packet
-      int packetSize = hvLoRa.parsePacket();
+      // try to receive a packet
+      uint8_t rxBuf[256];
+      int packetSize = hvRadio.recvRaw(rxBuf, sizeof(rxBuf));
       if (packetSize) {
         lastMsgRX = "";
         for (int i = 0; i < packetSize; i++)
-                  lastMsgRX = lastMsgRX + ((char)hvLoRa.read());
-        lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(hvLoRa.packetRssi());
+                  lastMsgRX = lastMsgRX + ((char)rxBuf[i]);
+        lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(hvRadio.getLastRSSI());
         Serial.println(lastMsgRX);
         webSocket.broadcastTXT(lastMsgRX);
       }
@@ -495,12 +422,15 @@ void HasTRX(void *pvParameters) {
 /// TX LoRa
 void sendLORA(String outgoing)
 {
-  hvLoRa.beginPacket();                     // start packet
-  hvLoRa.write(destinationLORA);            // add destination address
-  //hvLoRa.write(localaddressLORA);         // add sender address
-  //hvLoRa.write(outgoing.length());        // add payload length
-  hvLoRa.print(outgoing);                   // add payload
-  hvLoRa.endPacket();                       // finish packet and send it
+  uint8_t txBuf[256];
+  size_t txLen = 0;
+  txBuf[txLen++] = destinationLORA;         // add destination address
+  //txBuf[txLen++] = localaddressLORA;      // add sender address
+  //txBuf[txLen++] = outgoing.length();     // add payload length
+  for (size_t i = 0; i < outgoing.length() && txLen < sizeof(txBuf); i++)
+    txBuf[txLen++] = (uint8_t)outgoing[i];  // add payload
+  hvRadio.startSendRaw(txBuf, txLen);       // send it (blocks until on air)
+  while (!hvRadio.isSendComplete()) { }
   #ifdef HAS_OLED
   OLEDme(outgoing);
   #endif
@@ -508,24 +438,6 @@ void sendLORA(String outgoing)
   Serial.println(outgoing);
   lastMsgTX = outgoing;                   // Record last message sent
   MyRX_Reset = true;
-}
-
-/// RX LoRa
-void onReceiveLORA(int packetSize)
-{
-  // read packet
-  lastMsgRX = "";
-  for (int i = 0; i < packetSize; i++)
-  {
-    lastMsgRX = lastMsgRX + ((char)hvLoRa.read());
-  }
-  lastMsgRX = "RX:" + lastMsgRX + "|RSSI: " + String(hvLoRa.packetRssi());
-  Serial.print("RX:");
-  Serial.println(lastMsgRX);
-  #ifdef HAS_OLED
-  OLEDme(lastMsgRX);
-  #endif
-  webSocket.broadcastTXT(lastMsgRX);
 }
 
 /// Core 1 Task (Beacon LoRa)
@@ -588,7 +500,7 @@ void onWebSocketEvent(uint8_t clientID, WStype_t type, uint8_t * payload, size_t
       // DUMP LORA
       if (payloadS == "GET:LORA") {
         // dump lora config
-        hvLoRa.dumpRegisters(Serial);
+        hvRadio.dumpRegisters(Serial);
         webSocket.sendTXT(clientID, "ACK:GET:LORA");
       }
       
@@ -713,22 +625,37 @@ void initWiFi() {
   #ifdef WIFI_SSID
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_KEY);
-  while(WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+  // Pre-existing bug, unrelated to this HAL work: this loop had no bound at
+  // all -- WIFI_POLL_DELAY/WIFI_POLL_TRIES were already defined up top for
+  // exactly this but never actually used, so if WIFI_SSID's network isn't
+  // reachable the board hangs here forever and never reaches the AP
+  // fallback below (or logo()/HasTRX() afterward).
+  int wifiTries = 0;
+  while (WiFi.status() != WL_CONNECTED && wifiTries < WIFI_POLL_TRIES) {
+    delay(WIFI_POLL_DELAY);
+    wifiTries++;
   }
-  Serial.println(" 300: WiFi CL initialized");
-  //Serial.println("310: WiFi IP  " + WiFi.localIP());
-  //Serial.println("320: WiFi CL initialized");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(" 300: WiFi CL initialized");
+    //Serial.println("310: WiFi IP  " + WiFi.localIP());
+  }
   #endif
 
-  if (WiFi.status() != WL_CONNECTED) 
+  if (WiFi.status() != WL_CONNECTED)
   {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_APSSID, WIFI_APKEY);
-    IPAddress ip = WiFi.softAPIP();
-    Serial.println(" 300: WiFi AP initialized");
-    //Serial.println(" 310: WiFi IP  " + ip);
-    //Serial.println(" 320: WiFi AP initialized");
+    // Pre-existing bug, unrelated to this HAL work: softAP()'s return value
+    // was never checked, so a rejected passphrase (WPA2-PSK requires 8-63
+    // chars -- confirmed on real hardware with the previous 6-char
+    // WIFI_APKEY, which softAP() silently refused) still printed
+    // "WiFi AP initialized" with no AP actually up.
+    if (WiFi.softAP(WIFI_APSSID, WIFI_APKEY)) {
+      IPAddress ip = WiFi.softAPIP();
+      Serial.println(" 300: WiFi AP initialized");
+      //Serial.println(" 310: WiFi IP  " + ip);
+    } else {
+      Serial.println(" ERR: WiFi AP init failed (check WIFI_APKEY length -- WPA2-PSK needs 8-63 chars)");
+    }
   }
   
 }
@@ -815,17 +742,16 @@ void initPMU() {
 }
 #endif
 
-#ifndef HASV_HELTEC_BOARD
 void initLoRaRadio() {
-  // Heltec boards get this for free from Heltec.begin(); everyone else
-  // wires the SX127x up by hand from the board's variant pin definitions.
+  // Every board wires its own radio up by hand now, from the board's pin
+  // definitions -- including Heltec boards, whose Heltec.begin() call
+  // (setup(), below) deliberately skips its own bundled radio init
+  // (LoRaEnable=false) so hvRadio is always the one driving the chip.
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-  hvLoRa.setPins(LORA_CS, LORA_RST, LORA_IRQ);
-  if (!hvLoRa.begin(BAND)) {
+  if (!hvRadio.begin(BAND)) {
     Serial.println(" ERR: LoRa radio init failed");
   }
 }
-#endif
 
 //
 // SETUP
@@ -836,7 +762,10 @@ void setup() {
   initPMU();
   #endif
   #ifdef HASV_HELTEC_BOARD
-  Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
+  // LoRa disabled: the radio is always driven by hvRadio/initLoRaRadio()
+  // now (see HasTRX/sendLORA and the HASV_SX126X_BOARD comment above) --
+  // Heltec.begin() here is display/Vext/serial bring-up only.
+  Heltec.begin(true /*DisplayEnable*/, false /*LoRaEnable*/, true /*SerialEnable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
   #endif
   initSerial();
   Serial.println("INIT: HASviolet ESP32");
@@ -848,9 +777,7 @@ void setup() {
   initWiFi();
   initWebServer();
   initWebSockets();
-  #ifndef HASV_HELTEC_BOARD
   initLoRaRadio();
-  #endif
   #ifdef HAS_OLED
   initOLED();
   logo();

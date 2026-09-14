@@ -1,6 +1,6 @@
 # Project State — HASviolet ESP32
 
-_Last reviewed: 2026-09-13 — the SX127x multi-board work below is merged to `main` (via `ESP32-support`); the SX126x/RadioLib section reflects the `Radiolib` branch, complete and pushed but not yet merged._
+_Last reviewed: 2026-09-14 — the SX127x multi-board work and the SX126x/RadioLib work below are both merged to `main`. A `meshcore` branch (cut from `main`) has since replaced the split described in "Architecture" and "Board support" below with a single shared radio HAL across all 13 boards — see "Shared Radio HAL + RadioLib everywhere" below, which supersedes those sections' radio-layer descriptions (the board/OLED/PMU material in them is still accurate)._
 
 ## What this is
 
@@ -15,7 +15,7 @@ No SSL/TLS and no user authentication are implemented yet on the ESP32 side (unl
 Three conceptual parts, one physical device:
 
 - **Server** — ESP32 running Web + WebSocket services on Core 1, LoRa comms on Core 0 (FreeRTOS task `HasTRX` pinned to core 0 via `xTaskCreatePinnedToCore`). This requires a dual-core chip — see the SX126x/C3/C6 note below.
-- **Radio** — either SX1276-class (Heltec library, or `sandeepmistry/LoRa` + per-board pins for TTGO/T-Beam) or, on `Radiolib`-branch boards, SX1262-class via RadioLib and a `RadioLibSX126x` adapter — all behind a shared `hvLoRa` macro in `main.cpp` so the rest of the file doesn't care which.
+- **Radio** — either SX1276-class (Heltec library, or `sandeepmistry/LoRa` + per-board pins for TTGO/T-Beam) or, on `Radiolib`-branch boards, SX1262-class via RadioLib and a `RadioLibSX126x` adapter — all behind a shared `hvLoRa` macro in `main.cpp` so the rest of the file doesn't care which. **Superseded on `meshcore`** — see "Shared Radio HAL + RadioLib everywhere" below.
 - **Client** — Static files served from SPIFFS: `hasVIOLET_INDEX.html` → loads `hasVIOLET.css` + `hasVIOLET.js` → JS opens a WebSocket to the device and drives the whole UI (channel/radio settings, TX/RX text, macros, CMDline).
 
 Boot sequence (from `setup()` in [src/main.cpp](src/main.cpp)) prints numbered INIT stages: 000 core start → 100 SPIFFS → 200 JSON config load → 300 WiFi (STA, falls back to self-hosted AP) → 400 web server → 500 WebSockets → 600 OLED. HasTRX (LoRa) task then starts on core 0; `loop()` on core 1 just pumps `webSocket.loop()`.
@@ -111,6 +111,31 @@ This board has **no OLED at all** — its display is a color **ST7735 TFT** on i
 
 **Effort signal, in retrospect:** three of the four boards (T3-S3, Station G2, T-Beam Supreme) turned into config-and-adapter-reuse exercises once the `hvLoRa`/`oledDisplay` seams existed — even the "different chip" pieces (SH1106 vs SH1107, AXP2101 vs AXP192) were a few dozen lines each, not new architecture. Wireless Tracker's TFT was the only genuinely new *kind* of adapter. As with every board in this repo, none of this can be fully confirmed correct (BUSY-line timing, TCXO wiring, PMU register behavior, TFT geometry) without the actual hardware in hand — everything here is build-verified, not hardware-verified.
 
+## Shared Radio HAL + RadioLib everywhere (`meshcore` branch)
+
+Started as prep work for letting a user choose HASviolet native networking or [MeshCore](https://github.com/meshcore-dev/MeshCore) at runtime. Comparing the two stacks layer-by-layer found they diverge at the mesh/routing/security layer but already converge on the physical layer — both ultimately drive an SX126x/SX127x chip through RadioLib with an interrupt-flag+poll state machine. This work makes that convergence real in this codebase: every one of the 13 boards now goes through RadioLib and one shared HAL, instead of only the 4 SX126x boards.
+
+### What changed
+
+- New local library, [lib/HasRadio/](lib/HasRadio/): `HasRadio.h` is an abstract interface (method names/shapes deliberately close to MeshCore's own `mesh::Radio` contract — `startSendRaw`/`recvRaw`/`getLastRSSI`/etc. — so vendoring MeshCore's `Mesh`/`Dispatcher` onto this same HAL later is a near drop-in). `HasRadioSX126x` and `HasRadioSX127x` both implement it directly on RadioLib.
+- `sandeepmistry/LoRa` and the Heltec library's bundled radio driver are both gone. Heltec boards now use `Heltec.begin()` for display/Vext/serial only (`LoRaEnable=false`); the radio object is always a `HasRadio` subclass, same as every other board.
+- `src/main.cpp`'s old `hvLoRa` macro maze (`HASV_HELTEC_BOARD`/`HASV_SX126X_BOARD`/three-way dispatch) collapsed to one axis (chip family) and one object (`hvRadio`). `HasTRX`/`sendLORA` were rewritten against the new interface; the dead `onReceiveLORA()` (defined, never actually registered as a callback) was removed.
+- Heltec boards needed new explicit `-DLORA_SCK/MISO/MOSI/CS/RST/IRQ` pin flags in `platformio.ini` (previously implicit inside `Heltec.begin()`) — sourced from arduino-esp32's own `pins_arduino.h` for each board id; all four SX1276 Heltec boards (V1/V2/Wireless Stick/Wireless Stick Lite) share identical wiring (SCK=5, MISO=19, MOSI=27, CS=18, RST=14, DIO0=26).
+- The now-dead `generic_radio`/`RF_PACONFIG_PASELECT_PABOOST` build-flag section was removed — RadioLib's SX127x `setOutputPower()` handles PA_BOOST-vs-RFO selection internally; `HasRadioSX127x::setTxPower()` just clamps to `>=2` dBm to keep it always picking PA_BOOST (RFO isn't wired on any board here).
+- **Known regression, accepted deliberately:** `GET:LORA`'s register dump is now "not supported" on SX127x boards too (previously real, via `sandeepmistry/LoRa`). RadioLib doesn't expose raw register reads on its public API without a "godmode" build (which MeshCore's own pinned RadioLib fork uses — this project doesn't build RadioLib that way yet).
+- TX is still blocking under the hood in both `HasRadio` implementations — matches prior behavior exactly (`RadioLib::transmit()` was already blocking before this work); real non-blocking TX arrives when MeshCore's own dispatcher does. `isSendComplete()` exists on the interface for that but always returns `true` today.
+- Also ported two hardware-confirmed bugs found on the (separate, unrelated) `mesh` branch's Meshtastic-interop hardware bring-up, since they directly affect boards this work touches:
+  - `-DClass_Wifi_LoRa` build flag, working around a real case-mismatch bug in `heltecautomation/Heltec ESP32 Dev-Boards@^2.1.1` itself (`heltec.h` defines `Class_WIFI_LORA`, `heltec.cpp`'s constructor checks the differently-cased `Class_Wifi_LoRa`, so `display` was never allocated and `Heltec.begin()` null-derefed).
+  - Heltec V3 recategorized as SX1262 (not SX1276 like every other Heltec board here) — folded directly into this session's `HASV_SX126X_BOARD` axis rather than landing as a separate intermediate fix.
+  - Bounded the previously-infinite WiFi STA-connect loop in `initWiFi()` (`WIFI_POLL_DELAY`/`WIFI_POLL_TRIES` were already defined for this but never used).
+- Found and fixed one more, independently, during this session's own hardware bring-up (see below): `WiFi.softAP()`'s return value was never checked, so a rejected passphrase still printed "WiFi AP initialized." `WIFI_APKEY` in `HASviolet_config.h` was also too short for WPA2-PSK (6 chars; needs 8+) — confirmed as the actual cause on real hardware.
+
+### Verification
+
+- **Build**: all 13 `pio run -e <env>` environments compile clean.
+- **Hardware**: a real Heltec WiFi LoRa 32 V3 was flashed and confirmed live — this is the one board that previously hung permanently at boot on `main` (the `Class_Wifi_LoRa` null-deref, and separately Heltec's own SX1276 driver looping forever on V3's actual SX1262 radio). With this work: clean boot through `INIT: COMPLETE`, `HasRadioSX126x::begin()` succeeds against the real chip (pins SCK=9, MISO=11, MOSI=10, CS=8, RST=12, DIO1=14, BUSY=13, TCXO=1.8V — Meshtastic-sourced, now hardware-confirmed rather than build-only), WiFi AP came up and was joined from a phone, and the existing `hasVIOLET_INDEX.html` web UI loaded over it. Not yet tried on this board: an actual LoRa TX/RX (no second node on hand) or a visual check of the OLED logo.
+- The other 12 boards remain build-verified only, same as before this session — no new hardware claims for them.
+
 ## Known issues / gaps (from code + README, not fixed by anyone yet)
 
 - No TLS and no user authentication on the ESP32 web/WebSocket services, despite `data/hasVIOLET.crt`/`.key` and `WWW_USER`/`WWW_KEY` existing — explicitly flagged by the author as deferred.
@@ -120,9 +145,10 @@ This board has **no OLED at all** — its display is a color **ST7735 TFT** on i
 
 ## Suggested next steps (not yet started)
 
-1. Merge `Radiolib` into `main` (currently pushed, PR not yet opened).
+1. Merge `meshcore`'s shared Radio HAL work into `main` (`Radiolib` itself is already merged, per the top note).
 2. Decide the fate of the `development/` dashboard v1/v2 trees — merge one into `data/`+`src/`, or document why both are kept.
 3. Confirm `HASviolet_config.h` values are placeholders, or move real secrets out of version control (e.g., a gitignored local config).
 4. Implement or explicitly schedule the TLS/auth work called out in the README.
 5. Source real pin data for RAK11200 and add it to the board matrix.
-6. Get any of the 13 boards on actual hardware to confirm what compiling alone can't: BUSY-line timing, TCXO/DIO1 wiring, PMU register behavior, and (Wireless Tracker specifically) TFT panel geometry.
+6. Get the other 12 boards on actual hardware (Heltec V3 is now done, see above) to confirm what compiling alone can't: BUSY-line timing, TCXO/DIO1 wiring, PMU register behavior, and (Wireless Tracker specifically) TFT panel geometry.
+7. Vendor MeshCore's own `Mesh`/`Dispatcher` onto `lib/HasRadio`'s shared interface, and add the runtime native-vs-MeshCore selection this branch is ultimately for.
