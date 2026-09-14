@@ -16,6 +16,8 @@ Best efforts are made to document as much of the build and code as possible in u
 
 - [Hack It](#Hack-It)
 
+- [License](#License)
+
 
 # Supported Boards
 
@@ -193,3 +195,8 @@ During development it is common for me to run VSC with a monitor window set to v
 # Final Thoughts
 
 This release took longer than anticipated primarily because all coding (front to back) was done by one developer. But the time spent was a wonderful journey that will be shared on HVDN social outlets (web, videos, interview, etc) including some choices made to get the initial release out like why no SSL or user auth? Stay tuned.
+
+# License
+
+HASviolet-ESP32's own code is MIT-licensed. See [LICENSE.md](LICENSE.md) for the full
+text, plus attribution for every third-party library this project builds against.

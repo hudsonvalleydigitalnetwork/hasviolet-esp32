@@ -107,6 +107,9 @@
 #include "SPIFFS.h"
 #include "ArduinoJson.h"
 #include "FS.h"
+#ifdef HASV_MESHCORE_SUPPORT
+#include "HasMeshCoreChat.h"
+#endif
 #include "HVDN_logo.h"
 
 
@@ -269,6 +272,18 @@ HasRadioSX127x hvRadioImpl(LORA_CS, LORA_IRQ, LORA_RST);
 #endif
 HasRadio &hvRadio = hvRadioImpl;
 
+// MeshCore backend. radio_driver/rtc_clock come from MeshCore's own vendored
+// variants/heltec_v3/target.cpp (see platformio.ini's MC_VARIANT); this is
+// therefore a *second*, independent radio object from hvRadio above -- only
+// one of the two is ever begin()'d/radio_init()'d per boot, gated by
+// networkMode (see setup()). fast_rng/tables are HASviolet's own globals,
+// same as MeshCore's own examples/*/main.cpp always declares them.
+#ifdef HASV_MESHCORE_SUPPORT
+StdRNG fast_rng;
+SimpleMeshTables meshTables;
+HasMeshCoreChat theMeshCoreChat(radio_driver, fast_rng, rtc_clock, meshTables);
+#endif
+
 //
 // VARIABLES
 //
@@ -287,6 +302,14 @@ TaskHandle_t TaskWebsox;
 // Configure LoRa
 // byte localaddressLORA = 0xBB;          // LoRa address of this device (irrelevant)
 byte destinationLORA = 0xFF;              // LoRa destination to send to (broadcast default)
+
+// Which networking backend to use, read once at boot from hasVIOLET.json's
+// NETWORK.mode field (loadJsonFile()) -- "native" (default, for existing
+// installs with no such field) or "meshcore". Switching requires a reboot
+// (see setup()'s branch below and onWebSocketEvent's SET:NETWORK: handler)
+// rather than a live hot-swap: native's hvRadio and MeshCore's own radio
+// classes can't both own the SPI/radio pins at once.
+String networkMode = "native";
 
 // Default settings before HASviolet.json load
 String channel = "HV1";                   // Channel
@@ -440,6 +463,22 @@ void sendLORA(String outgoing)
   MyRX_Reset = true;
 }
 
+#ifdef HASV_MESHCORE_SUPPORT
+/// Core 0 Task (MeshCore) -- same task slot HasTRX uses in native mode
+/// (see setup()), never both: the two backends' radio objects can't share
+/// the SPI/radio pins at once.
+void HasMeshCoreLoop(void *pvParameters) {
+  Serial.print("CPU(");
+  Serial.print(xPortGetCoreID());
+  Serial.println("): Task (re)start - HasMeshCoreLoop (MeshCore)");
+  while (true) {
+    theMeshCoreChat.loop();
+    rtc_clock.tick();
+    delay(5);
+  }
+}
+#endif
+
 /// Core 1 Task (Beacon LoRa)
 void HasBeacon(void *pvParameters) {
   // read channel info then set
@@ -563,8 +602,41 @@ void onWebSocketEvent(uint8_t clientID, WStype_t type, uint8_t * payload, size_t
         // read channel info then set
         webSocket.sendTXT(clientID, "ACK:" + payloadS);
         payloadS.replace("TX:","");
-        sendLORA(payloadS);
+        #ifdef HASV_MESHCORE_SUPPORT
+        if (networkMode == "meshcore") {
+          theMeshCoreChat.sendChannelText(payloadS);
+        } else
+        #endif
+        {
+          sendLORA(payloadS);
+        }
       }
+
+      //NETWORK (native/MeshCore runtime switch -- see project_state.md.
+      //Persisted to hasVIOLET.json then a reboot, not a live hot-swap: the
+      //two backends' radio objects can't both own the SPI/radio pins at
+      //once, see hvRadio/theMeshCoreChat's declarations above and setup()
+      //below.)
+      #ifdef HASV_MESHCORE_SUPPORT
+      if (payloadS == "SET:NETWORK:NATIVE" || payloadS == "SET:NETWORK:MESHCORE") {
+        networkMode = (payloadS == "SET:NETWORK:MESHCORE") ? "meshcore" : "native";
+        File configFile = SPIFFS.open("/hasVIOLET.json", "r");
+        DynamicJsonDocument doc(1024);
+        if (configFile) {
+          deserializeJson(doc, configFile);
+          configFile.close();
+        }
+        doc["NETWORK"]["mode"] = networkMode;
+        File outFile = SPIFFS.open("/hasVIOLET.json", "w");
+        if (outFile) {
+          serializeJson(doc, outFile);
+          outFile.close();
+        }
+        webSocket.sendTXT(clientID, "ACK:" + payloadS);
+        delay(200);           // give the ACK a moment to actually go out
+        ESP.restart();
+      }
+      #endif
     }
 }
 
@@ -588,9 +660,21 @@ void initSPIFFS() {
 void loadJsonFile() {
   File configFile = SPIFFS.open("/hasVIOLET.json", "r");
   DynamicJsonDocument doc(1024);
-  // The filter: it contains "true" for each value we want to keep
+  // The filter: it contains "true" for each value we want to keep.
+  // Pre-existing bug, found while adding NETWORK below and unrelated to
+  // this session's MeshCore work otherwise: this filter only ever allowed
+  // a top-level "CURRENT" key through, but hasVIOLET.json has no such key
+  // (see data/hasVIOLET.json) -- ArduinoJson's Filter drops everything not
+  // named here, so every field below has been silently keeping its
+  // hardcoded default forever, never actually loading from JSON. Left
+  // exactly as broken for RADIO/CONTACT would also have broken NETWORK the
+  // same way, so this corrects the filter to the keys the code actually
+  // reads instead of leaving a second feature quietly dead on top of the
+  // first.
   StaticJsonDocument<500> filter;
-  filter["CURRENT"] = true;
+  filter["RADIO"] = true;
+  filter["CONTACT"] = true;
+  filter["NETWORK"] = true;
   if(!configFile){
     Serial.println("Failed to open hasVIOLET.json for reading");
     return;
@@ -616,6 +700,12 @@ void loadJsonFile() {
     mybeacon = (const char*)doc["CONTACT"]["mybeacon"];
     dstcall = (const char*)doc["CONTACT"]["dstcall"];
     dstssid = (const char*)doc["CONTACT"]["dstssid"];
+    // "| native" (ArduinoJson's null-coalescing form, unlike every field
+    // above) matters here specifically: existing installs' hasVIOLET.json
+    // has no NETWORK key at all, and a missing key must resolve to the
+    // native default networkMode already has, not silently overwrite it
+    // with an empty string.
+    networkMode = doc["NETWORK"]["mode"] | "native";
     configFile.close();
   }
   Serial.println(" 200: JSON loaded");
@@ -777,7 +867,22 @@ void setup() {
   initWiFi();
   initWebServer();
   initWebSockets();
-  initLoRaRadio();
+  #ifdef HASV_MESHCORE_SUPPORT
+  if (networkMode == "meshcore") {
+    // MeshCore's own vendored radio_init() (variants/heltec_v3/target.cpp)
+    // -- an entirely separate radio object from hvRadio/initLoRaRadio()
+    // below, never both initialized in the same boot.
+    if (!radio_init()) {
+      Serial.println(" ERR: MeshCore radio init failed");
+    }
+    fast_rng.begin(radio_driver.getRngSeed());
+    theMeshCoreChat.begin(SPIFFS, channel);
+    Serial.println(" 700: MeshCore initialized");
+  } else
+  #endif
+  {
+    initLoRaRadio();
+  }
   #ifdef HAS_OLED
   initOLED();
   logo();
@@ -791,7 +896,14 @@ void setup() {
   // HasTRX on Core 0
   // hasWebsox on Core 1 butno need to assign since Loop on that core by default
   //
-  xTaskCreatePinnedToCore(HasTRX, "HasTRX", 10000, NULL, 1, &TaskTRX, 0);
+  #ifdef HASV_MESHCORE_SUPPORT
+  if (networkMode == "meshcore") {
+    xTaskCreatePinnedToCore(HasMeshCoreLoop, "HasMeshCoreLoop", 10000, NULL, 1, &TaskTRX, 0);
+  } else
+  #endif
+  {
+    xTaskCreatePinnedToCore(HasTRX, "HasTRX", 10000, NULL, 1, &TaskTRX, 0);
+  }
   delay(500);
   //
   // HasBeacon on Core 1

@@ -1,4 +1,7 @@
 {
+	"NETWORK": {
+		"mode": "native"
+	},
 	"RADIO": {
 		"channel": "HV1",
 		"rfmodule": "RFM9X",
